@@ -253,7 +253,7 @@ void GraphicsManager::Run() {
             showStandbyScreen_();
             break;
         case State::RUNNING: {
-            auto* render = currentTask_->asRender();
+            auto* render = currentTask_.as<reyer::plugin::IRender>();
             BeginDrawing();
             ClearBackground({128, 128, 128});
             render->render();

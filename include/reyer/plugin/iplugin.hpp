@@ -56,9 +56,6 @@ class IPlugin : public ILifecycle, public IConfigurable {
   public:
     virtual PluginType getType() const = 0;
 
-    // Type-safe accessors for specific plugin interfaces
-    virtual IRender* asRender() { return nullptr; }
-
     virtual ~IPlugin() = default;
 };
 
@@ -81,7 +78,7 @@ template <typename TConfig> class PluginBase : public IPlugin {
     virtual const char *getConfigSchema() override final {
         auto err = glz::write_json_schema<TConfig>(schema_buffer_);
         if (err) {
-            return nullptr;
+            return "{}";
         }
         return schema_buffer_.c_str();
     }
@@ -97,7 +94,6 @@ template <typename TConfig> class PluginBase : public IPlugin {
     };
 
   protected:
-
     virtual void onInit() = 0;
     virtual void onPause() = 0;
     virtual void onResume() = 0;
@@ -120,11 +116,9 @@ class RenderPluginBase : public PluginBase<TConfig>, public IRender {
         return PluginType::RENDER;
     }
 
-    virtual IRender* asRender() override { return this; }
-
-    virtual void render() override final { 
+    virtual void render() override final {
         std::lock_guard<std::mutex> lock(data_mutex_);
-        onRender(); 
+        onRender();
     }
 
     virtual void push(core::Data *data, size_t size) override final {
@@ -150,7 +144,7 @@ class RenderPluginBase : public PluginBase<TConfig>, public IRender {
     }
 
     virtual void reset() override {
-        finished_.store(false, std::memory_order_release) ;
+        finished_.store(false, std::memory_order_release);
         PluginBase<TConfig>::reset();
     }
 
@@ -166,10 +160,7 @@ class RenderPluginBase : public PluginBase<TConfig>, public IRender {
         output_queue_.push({timestamp, event});
     }
 
-    void endTask() {
-        finished_.store(true, std::memory_order_release);
-    }
-
+    void endTask() { finished_.store(true, std::memory_order_release); }
 
   private:
     core::Queue<core::UserEvent> output_queue_;
