@@ -1,0 +1,94 @@
+#pragma once
+
+#include <atomic>
+#include <cstdarg>
+#include <cstdint>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <system_error>
+
+#include "reyer_rt/managers/broadcast_manager.hpp"
+#include "reyer_rt/managers/plugin_manager.hpp"
+#include "reyer_rt/net/message_types.hpp"
+#include <reyer/core/queue.hpp>
+#include <reyer/graphics/graphics.hpp>
+#include <reyer/plugin/defs.hpp>
+#include <vector>
+
+namespace reyer_rt::managers {
+
+class GraphicsManager {
+  public:
+    explicit GraphicsManager(
+        std::shared_ptr<PluginManager> &plugin_manager,
+        std::shared_ptr<BroadcastManager> &broadcast_manager);
+
+    void Init();
+
+    void Run();
+
+    void Shutdown();
+
+    bool SetProtocol(const net::message::ProtocolRequest &protocol);
+
+    std::future<std::error_code>
+    EnqueueCommand(const net::message::Command &command);
+
+    std::vector<net::message::MonitorInfo> GetMonitorInfo();
+
+    std::vector<net::message::MonitorInfo> monitors_;
+
+    ~GraphicsManager() = default;
+
+  private:
+    enum class State : uint8_t {
+        IDLE,
+        STANDBY,
+        RUNNING,
+        SAVING,
+    };
+
+    enum class LoadCommand : uint8_t {
+        FIRST,
+        NEXT,
+        PREV,
+        LAST,
+        FINISH
+    };
+
+    std::atomic<State> state_{};
+
+    void pollConfigRequest_();
+
+    void pollMonitors_();
+
+    void pollCommands_();
+
+    void loadProtocol_();
+
+    void loadTask_(const LoadCommand& command);
+
+    void showStandbyScreen_();
+
+    static void errorCallback_(int code, const char *message, va_list args);
+
+    std::atomic<bool> stop_requested_{false};
+
+    std::weak_ptr<managers::PluginManager> pluginManager_;
+    std::weak_ptr<managers::BroadcastManager> broadcastManager_;
+
+    std::mutex protocolMutex_;
+    std::optional<net::message::ProtocolRequest> currentProtocol_;
+    bool protocolUpdated_{false};
+    bool requiresWindowReload{false};
+
+    reyer::plugin::Plugin currentTask_;
+    size_t currentTaskIndex_{0};
+
+    reyer::core::Queue<net::message::CommandPromise> commandQueue_;
+};
+
+} // namespace reyer_rt::managers

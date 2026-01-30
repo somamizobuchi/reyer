@@ -1,0 +1,13 @@
+[project]
+name = "reyer-app"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "msgspec>=0.20.0",
+    "pynng>=0.8.1",
+    "pyside6>=6.10.1",
+    "jsonschema>=4.20.0",
+    "jsonref>=1.1.0",
+]

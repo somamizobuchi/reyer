@@ -1,0 +1,5 @@
+build/
+.cache/
+.claude/
+.DS_Store
+CLAUDE.md
