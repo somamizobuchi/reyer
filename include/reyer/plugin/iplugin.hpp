@@ -10,14 +10,13 @@
 #include <glaze/util/expected.hpp>
 #include <mutex>
 #include <span>
-#include <stdexcept>
 #include <string>
 
 namespace reyer::plugin {
 
 enum class PluginType : uint32_t {
     RENDER = 0x0,
-    TASK = 0x1,
+    SOURCE = 0x1,
     CALIBRATION = 0x2,
 };
 
@@ -38,18 +37,18 @@ class IConfigurable {
   public:
     virtual const char *getConfigSchema() = 0;
     virtual void setConfigStr(const char *config_str) = 0;
-    virtual ~IConfigurable() = 0;
+    virtual ~IConfigurable() = default;
 };
 
 template <typename T> class IConsumer {
   public:
-    virtual void push(T *Data, size_t size);
+    virtual void push(T *Data, size_t size) = 0;
     virtual ~IConsumer() = default;
 };
 
 template <typename T> class IProducer {
   public:
-    virtual bool pop(T *Data);
+    virtual bool pop(T *Data) = 0;
     virtual ~IProducer() = default;
 };
 

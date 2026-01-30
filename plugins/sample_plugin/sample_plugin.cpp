@@ -10,6 +10,7 @@ namespace reyer::plugin {
 class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
   public:
     SamplePlugin() {};
+    ~SamplePlugin() = default;
 
   protected:
     virtual void onInit() override {};
@@ -26,8 +27,6 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
     virtual void onData(std::span<const core::Data> data) override {
         auto view = data | std::views::transform(&core::Data::left);
     }
-
-    ~SamplePlugin() = default;
 };
 }; // namespace reyer::plugin
 
