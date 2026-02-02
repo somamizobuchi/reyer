@@ -18,7 +18,8 @@ class MessageManager : public threading::Thread<MessageManager> {
     friend struct MessageVisitor;
 
     using MessageVariant =
-        std::variant<net::message::Ping, net::message::ProtocolRequest,
+        std::variant<net::message::Ping, net::message::GraphicsSettingsRequest,
+                     net::message::ProtocolRequest,
                      net::message::ResourceRequest,
                      net::message::CommandRequest>;
 
@@ -64,6 +65,9 @@ class MessageManager : public threading::Thread<MessageManager> {
 
         std::expected<net::message::Response, std::error_code>
         operator()(const net::message::Ping &ping);
+
+        std::expected<net::message::Response, std::error_code>
+        operator()(const net::message::GraphicsSettingsRequest &request);
 
         std::expected<net::message::Response, std::error_code>
         operator()(const net::message::ProtocolRequest &request);

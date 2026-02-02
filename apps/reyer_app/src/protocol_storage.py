@@ -10,7 +10,7 @@ from datetime import datetime
 import tempfile
 import os
 
-from .messages import Protocol
+from .messages import ProtocolRequest
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,7 @@ class ProtocolStorage:
 
     def save_protocol(
         self,
-        protocol: Protocol,
+        protocol: ProtocolRequest,
         auto_name: bool = True,
         custom_filename: Optional[str] = None
     ) -> tuple[bool, str, Optional[Path]]:
@@ -57,7 +57,7 @@ class ProtocolStorage:
         Save protocol to disk as JSON file.
 
         Args:
-            protocol: Protocol object to save
+            protocol: ProtocolRequest object to save
             auto_name: If True, auto-generate filename with timestamp
             custom_filename: Custom filename (used if auto_name=False)
 
@@ -117,7 +117,7 @@ class ProtocolStorage:
             logger.error(f"Unexpected error saving protocol: {e}")
             return False, f"Error: {e}", None
 
-    def load_protocol(self, filepath: Path) -> Optional[Protocol]:
+    def load_protocol(self, filepath: Path) -> Optional[ProtocolRequest]:
         """
         Load protocol from JSON file.
 
@@ -125,7 +125,7 @@ class ProtocolStorage:
             filepath: Path to protocol JSON file
 
         Returns:
-            Protocol object if successful, None otherwise
+            ProtocolRequest object if successful, None otherwise
         """
         try:
             if not filepath.exists():
@@ -136,7 +136,7 @@ class ProtocolStorage:
             with open(filepath, 'rb') as f:
                 json_data = f.read()
 
-            protocol = msgspec.json.decode(json_data, type=Protocol)
+            protocol = msgspec.json.decode(json_data, type=ProtocolRequest)
             logger.info(f"Protocol loaded: {protocol.name} from {filepath}")
             return protocol
 

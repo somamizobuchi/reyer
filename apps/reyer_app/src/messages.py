@@ -25,13 +25,6 @@ class TaskInfo(Message):
     name: str = ""
     configuration: str = ""
 
-class ProtocolRequest(Message):
-    """Request to load/manage a protocol."""
-    name: str
-    participant_id: str
-    notes: str
-    tasks: list[TaskInfo]
-
 
 class Response(Message):
     """Generic response message."""
@@ -43,8 +36,19 @@ class Response(Message):
 
 class ResourceCode(IntEnum):
     """Resource type codes for ResourceRequest."""
-    MONITORS = 0
-    PLUGINS = 1
+    RUNTIME_STATE = 0
+    AVAILABLE_MONITORS = 1
+    AVAILABLE_PLUGINS = 2
+    CURRENT_GRAPHICS_SETTINGS = 3
+    CURRENT_PROTOCOL = 4
+    CURRENT_TASK = 5
+
+class RuntimeState(IntEnum):
+    """Runtime state values."""
+    DEFAULT = 0
+    STANDBY = 1
+    RUNNING = 2
+    SAVING = 3
 
 class Command(IntEnum):
     """Commands for the graphics manager"""
@@ -62,9 +66,10 @@ class BroadcastTopic(IntEnum):
 
 class ProtocolEvent(IntEnum):
     """Protocol lifecycle events."""
-    PROTOCOL_NEW = 0
-    TASK_START = 1
-    TASK_END = 2
+    GRAPHICS_READY = 0
+    PROTOCOL_NEW = 1
+    TASK_START = 2
+    TASK_END = 3
 
 class ProtocolEventMessage(Message):
     """Protocol event broadcast message."""
@@ -114,22 +119,25 @@ class GraphicsSettings(Message):
     width: int
     height: int
 
-class Protocol(Message):
-    """Protocol definition message."""
+class GraphicsSettingsRequest(Message):
+    """Request to initialize graphics settings (sent once at startup)."""
+    graphics_settings: GraphicsSettings
+    view_distance_mm: int
+
+class ProtocolRequest(Message):
+    """Request to load/manage a protocol."""
     name: str
     participant_id: str
     notes: str
     tasks: List[TaskInfo]
-    graphics_settings: GraphicsSettings
-    view_distance_mm: int
     protocol_uuid: str = ""
     
 
 # Type alias for any message variant
 MessageType = (
-    Ping | Pong | ProtocolRequest | Response |
-    ResourceRequest | PluginInfo | MonitorInfo |
-    Protocol
+    Ping | Pong | GraphicsSettingsRequest | ProtocolRequest |
+    Response | ResourceRequest | PluginInfo | MonitorInfo |
+    CommandRequest
 )
 
 

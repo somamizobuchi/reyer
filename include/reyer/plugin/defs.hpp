@@ -3,6 +3,7 @@
 #include <dlfcn.h>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 
 namespace reyer::plugin {
@@ -42,6 +43,21 @@ class Plugin {
         instance_ = std::shared_ptr<IPlugin>(create(), [destroy](IPlugin* p) {
             if (p && destroy) destroy(p);
         });
+
+        // Cache typed pointers at construction (one-time cost)
+        if (instance_) {
+            switch (instance_->getType()) {
+                case PluginType::RENDER:
+                    render_ = dynamic_cast<IRender*>(instance_.get());
+                    break;
+                case PluginType::SOURCE:
+                    // source_ = dynamic_cast<ISource*>(instance_.get());
+                    break;
+                case PluginType::CALIBRATION:
+                    // calibration_ = dynamic_cast<ICalibration*>(instance_.get());
+                    break;
+            }
+        }
     }
 
     // Copyable - shares ownership via shared_ptr
@@ -55,26 +71,33 @@ class Plugin {
     const std::string &getName() const { return name_; }
     explicit operator bool() const { return instance_ != nullptr; }
 
-    // Type-safe casting using PluginType enum (no dynamic_cast)
-    // Safe because PluginType check guarantees the concrete type implements T
+    // Zero-cost type-safe casting using pre-cached pointers
+    // Pointers are computed once at construction via dynamic_cast
     template <typename T>
     T* as() const {
-        if (!instance_) return nullptr;
-
-        // Check if the runtime type matches the requested type
-        if (instance_->getType() == PluginTypeTraits<T>::value) {
-            // reinterpret_cast is safe here: we've verified via PluginType
-            // that the concrete plugin class implements both IPlugin and T
-            return reinterpret_cast<T*>(instance_.get());
+        // Delegate to specialized getters (compile-time dispatch)
+        if constexpr (std::is_same_v<T, IRender>) {
+            return render_;
         }
-
-        return nullptr;
+        // Add more specializations as needed:
+        // else if constexpr (std::is_same_v<T, ISource>) {
+        //     return source_;
+        // }
+        else {
+            return nullptr;
+        }
     }
 
   private:
     std::shared_ptr<void> handle_;
     std::shared_ptr<IPlugin> instance_;
     std::string name_;
+
+    // Cached interface pointers (computed once at construction)
+    IRender* render_ = nullptr;
+    // Add more as plugin types are added:
+    // ISource* source_ = nullptr;
+    // ICalibration* calibration_ = nullptr;
 };
 } // namespace reyer::plugin
 

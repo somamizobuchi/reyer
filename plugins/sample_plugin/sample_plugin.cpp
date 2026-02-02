@@ -21,7 +21,7 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
 
     virtual void onRender() override {
         DrawFPS(10, 10);
-        DrawRectangle(100, 100, 100, 100, getConfiguration().square_color);
+        DrawRectanglePro({GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, 100, 100}, {50, 50}, 0,getConfiguration().square_color);
     }
 
     virtual void onData(std::span<const core::Data> data) override {

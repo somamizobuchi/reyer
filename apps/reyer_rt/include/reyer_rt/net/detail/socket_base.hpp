@@ -1,11 +1,10 @@
 #pragma once
 
 #include <cstddef>
-#include <nng/nng.h>
-#include <vector>
 #include <cstdint>
+#include <nng/nng.h>
+#include <functional>
 #include <system_error>
-#include <memory>
 
 namespace reyer_rt::net::detail {
 
@@ -72,6 +71,9 @@ public:
     SocketBase(SocketBase&&) = delete;
     SocketBase& operator=(SocketBase&&) = delete;
 
+    // Callback type
+    using pipe_cb_t = std::function<void(uint32_t)>;
+
     // Initialize socket with specified type
     std::error_code Init(SocketType type);
 
@@ -92,6 +94,12 @@ public:
 
     // Check if socket is open
     bool IsOpen() const;
+    //
+    // Register callback for connection
+    void RegisterConnectCallback(pipe_cb_t callback);
+
+    // Register callback for pipe disconnect
+    void RegisterDisconnectCallback(pipe_cb_t callback);
 
     // Set integer socket option
     std::error_code SetIntOption(const char* name, int value);
@@ -104,6 +112,13 @@ private:
     nng_listener listener_ = NNG_LISTENER_INITIALIZER;
     nng_dialer dialer_ = NNG_DIALER_INITIALIZER;
     bool is_open_ = false;
+
+    pipe_cb_t connect_cb_;
+    pipe_cb_t disconnect_cb_;
+
+    nng_msg* msg_;
+
+    static void handlePipeNotify_(nng_pipe pipe, nng_pipe_ev event, void *user_data);
 };
 
 // Error category for NNG

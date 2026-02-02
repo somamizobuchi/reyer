@@ -1,4 +1,5 @@
 #include "reyer_rt/net/reply_socket.hpp"
+#include "reyer_rt/net/detail/socket_base.hpp"
 #include <cstddef>
 #include <string>
 #include <system_error>
@@ -26,6 +27,14 @@ std::error_code ReplySocket::Receive(std::string& data) {
 std::error_code ReplySocket::Send(const std::string& data) {
     return base_.Send(data);
 }
+
+void ReplySocket::RegisterConnectCallback(detail::SocketBase::pipe_cb_t callback) {
+    base_.RegisterConnectCallback(std::move(callback));
+};
+
+void ReplySocket::RegisterDisconnectCallback(detail::SocketBase::pipe_cb_t callback) {
+    base_.RegisterDisconnectCallback(std::move(callback));
+};
 
 void ReplySocket::Shutdown() {
     base_.Close();

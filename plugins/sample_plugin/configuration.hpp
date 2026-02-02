@@ -1,15 +1,14 @@
 #pragma once
 #include <cstdint>
+#include <glaze/core/meta.hpp>
+#include <glaze/json/schema.hpp>
 #include <string>
 #include "raylib.h"
 
 namespace reyer::plugin {
 
     struct SampleConfiguration {
-        uint32_t n_trials;
-        bool is_debug;
-        std::string type;
-        Color square_color;
+        Color square_color{};
     };
 
 }

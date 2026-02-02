@@ -233,7 +233,7 @@ class ReyerClient:
         try:
             from .messages import ResourceRequest, ResourceCode, Response, PluginInfo
 
-            request = ResourceRequest(resource_code=ResourceCode.PLUGINS)
+            request = ResourceRequest(resource_code=ResourceCode.AVAILABLE_PLUGINS)
             response_data = self.send_request(request)
 
             if response_data:
@@ -264,7 +264,7 @@ class ReyerClient:
         try:
             from .messages import ResourceRequest, ResourceCode, Response, MonitorInfo
 
-            request = ResourceRequest(resource_code=ResourceCode.MONITORS)
+            request = ResourceRequest(resource_code=ResourceCode.AVAILABLE_MONITORS)
             response_data = self.send_request(request)
 
             if response_data:
@@ -290,7 +290,7 @@ class ReyerClient:
         Send protocol to reyer_rt for execution.
 
         Args:
-            protocol: Protocol message object
+            protocol: ProtocolRequest message object
 
         Returns:
             True if protocol was sent and accepted successfully, False otherwise
@@ -354,6 +354,55 @@ class ReyerClient:
             logger.error(f"Failed to send command: {e}")
             import traceback
             traceback.print_exc()
+            return False
+
+    def get_runtime_state(self) -> Optional[int]:
+        """
+        Get current runtime state from server.
+
+        Returns:
+            RuntimeState enum value, or None if request failed
+        """
+        try:
+            from .messages import ResourceRequest, ResourceCode, Response, RuntimeState
+
+            request = ResourceRequest(resource_code=ResourceCode.RUNTIME_STATE)
+            response_data = self.send_request(request)
+
+            if response_data:
+                response = deserialize_message(response_data, Response)
+                if response.success and response.payload:
+                    return RuntimeState(int(response.payload))
+            return None
+        except Exception as e:
+            logger.error(f"Failed to get runtime state: {e}")
+            return None
+
+    def send_graphics_settings(self, settings) -> bool:
+        """
+        Send graphics settings to runtime.
+
+        Args:
+            settings: GraphicsSettingsRequest message object
+
+        Returns:
+            True if settings were sent and accepted successfully, False otherwise
+        """
+        try:
+            from .messages import Response
+
+            response_data = self.send_request(settings)
+            if response_data:
+                response = deserialize_message(response_data, Response)
+                if response.success:
+                    logger.info("Graphics settings sent successfully")
+                    return True
+                else:
+                    logger.error(f"Server rejected: {response.error_message}")
+                    return False
+            return False
+        except Exception as e:
+            logger.error(f"Failed to send graphics settings: {e}")
             return False
 
     def subscribe(self, callback: Optional[Callable[[bytes], None]] = None) -> bool:

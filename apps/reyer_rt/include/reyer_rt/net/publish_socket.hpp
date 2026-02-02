@@ -20,6 +20,12 @@ public:
     // Publish a message
     std::error_code Publish(const std::string& data);
 
+    // Register a callback when a new subscriber is added
+    void RegisterConnectCallback(detail::SocketBase::pipe_cb_t callback);
+
+    // Register a callback when a subscriber is removed
+    void RegisterDisconnectCallback(detail::SocketBase::pipe_cb_t callback);
+
     // Shutdown the socket
     void Shutdown();
 

@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdarg>
+#include <format>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -24,11 +25,16 @@ GraphicsManager::GraphicsManager(
     : pluginManager_(plugin_manager), broadcastManager_(broadcast_manager) {}
 
 void GraphicsManager::Init() {
+    state_.store(State::DEFAULT, std::memory_order_release);
+
+    // Keep temporary window creation - required for pollMonitors_()
+    // Raylib needs a window context to query monitor information
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     SetTraceLogLevel(LOG_WARNING);
-    InitWindow(0, 0, "Reyer");
+    InitWindow(0, 0, "");
     pollMonitors_();
-    CloseWindow();
+    CloseWindow(); // Close immediately - real window created in
+                   // applyGraphicsSettings_()
 }
 
 void GraphicsManager::errorCallback_(int err, const char *fmt, va_list args) {
@@ -55,96 +61,101 @@ void GraphicsManager::errorCallback_(int err, const char *fmt, va_list args) {
     }
 }
 
+std::future<std::error_code> GraphicsManager::SetGraphicsSettings(
+    const net::message::GraphicsSettingsRequest &settings) {
+
+    // Create promise and get future
+    std::promise<std::error_code> promise{};
+    auto future = promise.get_future();
+
+    // Check if already initialized
+    auto current_state = state_.load(std::memory_order_acquire);
+    if (current_state != State::DEFAULT) {
+        promise.set_value(
+            std::make_error_code(std::errc::operation_not_permitted));
+        return future;
+    }
+
+    // Enqueue settings with promise - will be applied in Run() on main thread
+    net::message::GraphicsSettingsPromise gfx_promise{settings,
+                                                      std::move(promise)};
+    graphicsSettingsQueue_.push(std::move(gfx_promise));
+
+    return future;
+}
+
+void GraphicsManager::applyGraphicsSettings_(
+    net::message::GraphicsSettingsPromise &gfx_promise) {
+    const auto &settings = gfx_promise.settings;
+    const auto &gs = settings.graphics_settings;
+
+    // Set config flags
+    int flags = 0;
+    if (gs.anti_aliasing)
+        flags |= FLAG_MSAA_4X_HINT;
+    if (gs.vsync)
+        flags |= FLAG_VSYNC_HINT;
+    if (gs.full_screen)
+        flags |= FLAG_FULLSCREEN_MODE;
+    SetConfigFlags(flags);
+    SetTargetFPS(gs.target_fps);
+    SetTraceLogCallback(&GraphicsManager::errorCallback_);
+
+    // Create THE window (once for entire lifetime)
+    InitWindow(gs.width, gs.height, "Reyer RT");
+    SetWindowMonitor(gs.monitor_index);
+    SetWindowFocused();
+    ClearWindowState(FLAG_WINDOW_HIDDEN);
+
+    // Store settings for later access
+    graphicsSettings_ = settings;
+    graphicsInitialized_ = true;
+    state_.store(State::STANDBY, std::memory_order_release);
+
+    // Set promise to signal completion
+    gfx_promise.promise.set_value(std::error_code{});
+
+    // Broadcast GRAPHICS_READY
+    if (auto bcast = broadcastManager_.lock()) {
+        net::message::ProtocolEventMessage event{
+            "", // No protocol UUID yet
+            net::message::ProtocolEvent::GRAPHICS_READY, 0};
+        bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
+    }
+
+    spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
+                 gs.target_fps);
+}
+
 void GraphicsManager::loadProtocol_() {
     protocolUpdated_ = false;
 
     if (!currentProtocol_) {
-        state_.store(State::IDLE, std::memory_order_release);
+        state_.store(State::STANDBY, std::memory_order_release);
         currentTaskIndex_ = 0;
         return;
     }
 
-    int flags = 0;
-    if (IsWindowReady() && !requiresWindowReload) {
-        if (requiresWindowReload) {
-            CloseWindow();
-        } else {
-            SetWindowMonitor(currentProtocol_->graphics_settings.monitor_index);
-
-            SetWindowSize(currentProtocol_->graphics_settings.width,
-                          currentProtocol_->graphics_settings.height);
-
-            if (currentProtocol_->graphics_settings.vsync) {
-                SetWindowState(FLAG_VSYNC_HINT);
-            } else {
-                ClearWindowState(FLAG_VSYNC_HINT);
-            }
-
-            if (currentProtocol_->graphics_settings.full_screen) {
-                SetWindowState(FLAG_FULLSCREEN_MODE);
-            } else {
-                ClearWindowState(FLAG_FULLSCREEN_MODE);
-            }
-
-            SetTargetFPS(currentProtocol_->graphics_settings.target_fps);
-            SetWindowFocused();
-
-            state_.store(State::STANDBY, std::memory_order_release);
-
-            // Broadcast PROTOCOL_NEW event
-            if (auto bcast = broadcastManager_.lock()) {
-                net::message::ProtocolEventMessage event{
-                    currentProtocol_->protocol_uuid,
-                    net::message::ProtocolEvent::PROTOCOL_NEW,
-                    0
-                };
-                bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
-            }
-            return;
-        }
+    // Graphics MUST be initialized
+    if (!graphicsInitialized_) {
+        spdlog::error("Cannot load protocol: graphics not initialized");
+        state_.store(State::DEFAULT, std::memory_order_release);
+        return;
     }
 
-    // Window flags
-    SetConfigFlags(0);
-    if (currentProtocol_->graphics_settings.anti_aliasing) {
-        flags |= FLAG_MSAA_4X_HINT;
-    }
-    if (currentProtocol_->graphics_settings.vsync) {
-        flags |= FLAG_VSYNC_HINT;
-    }
-    if (currentProtocol_->graphics_settings.full_screen) {
-        flags |= FLAG_FULLSCREEN_MODE;
-    }
-    SetConfigFlags(flags);
-
-    SetTargetFPS(currentProtocol_->graphics_settings.target_fps);
-
-    SetTraceLogCallback(&GraphicsManager::errorCallback_);
-
-    InitWindow(currentProtocol_->graphics_settings.width,
-               currentProtocol_->graphics_settings.height,
-               currentProtocol_->name.c_str());
-
-    SetWindowMonitor(currentProtocol_->graphics_settings.monitor_index);
-
-    SetWindowFocused();
-
-    ClearWindowState(FLAG_WINDOW_HIDDEN);
-
+    // Just transition to STANDBY
     state_.store(State::STANDBY, std::memory_order_release);
 
-    // Broadcast PROTOCOL_NEW event
+    // Broadcast PROTOCOL_NEW
     if (auto bcast = broadcastManager_.lock()) {
         net::message::ProtocolEventMessage event{
             currentProtocol_->protocol_uuid,
-            net::message::ProtocolEvent::PROTOCOL_NEW,
-            0
-        };
+            net::message::ProtocolEvent::PROTOCOL_NEW, 0};
         bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
     }
 }
 
-void GraphicsManager::loadTask_(const LoadCommand& command) {
+void GraphicsManager::loadTask_(const LoadCommand &command) {
     auto broadcast_manager = broadcastManager_.lock();
     if (!broadcast_manager)
         throw std::runtime_error("Failed to get broadcast manager");
@@ -154,11 +165,21 @@ void GraphicsManager::loadTask_(const LoadCommand& command) {
 
     int nextIndex = currentTaskIndex_;
     switch (command) {
-        case LoadCommand::FIRST: nextIndex = 0; break;
-        case LoadCommand::LAST: nextIndex = currentProtocol_->tasks.size() - 1; break;
-        case LoadCommand::NEXT: nextIndex = currentTaskIndex_ + 1; break;
-        case LoadCommand::PREV: nextIndex = currentTaskIndex_ == 0 ? 0 : currentTaskIndex_ - 1; break;
-        case LoadCommand::FINISH: nextIndex = currentProtocol_->tasks.size(); break;
+    case LoadCommand::FIRST:
+        nextIndex = 0;
+        break;
+    case LoadCommand::LAST:
+        nextIndex = currentProtocol_->tasks.size() - 1;
+        break;
+    case LoadCommand::NEXT:
+        nextIndex = currentTaskIndex_ + 1;
+        break;
+    case LoadCommand::PREV:
+        nextIndex = currentTaskIndex_ == 0 ? 0 : currentTaskIndex_ - 1;
+        break;
+    case LoadCommand::FINISH:
+        nextIndex = currentProtocol_->tasks.size();
+        break;
     }
 
     if (currentTask_) {
@@ -168,9 +189,7 @@ void GraphicsManager::loadTask_(const LoadCommand& command) {
 
         net::message::ProtocolEventMessage event{
             currentProtocol_->protocol_uuid,
-            net::message::ProtocolEvent::TASK_END,
-            currentTaskIndex_
-        };
+            net::message::ProtocolEvent::TASK_END, currentTaskIndex_};
         if (auto ec = broadcast_manager->Broadcast(
                 net::message::BroadcastTopic::PROTOCOL, event)) {
             spdlog::warn("Failed to send broadcast message: {}", ec.message());
@@ -219,9 +238,7 @@ void GraphicsManager::loadTask_(const LoadCommand& command) {
 
     net::message::ProtocolEventMessage event{
         currentProtocol_->protocol_uuid,
-        net::message::ProtocolEvent::TASK_START,
-        currentTaskIndex_
-    };
+        net::message::ProtocolEvent::TASK_START, currentTaskIndex_};
     if (auto ec = broadcast_manager->Broadcast(
             net::message::BroadcastTopic::PROTOCOL, event)) {
         spdlog::warn("Failed to send broadcast message: {}", ec.message());
@@ -235,25 +252,32 @@ void GraphicsManager::Run() {
         pollCommands_();
 
         switch (state_) {
-        case State::IDLE: {
+
+        case State::DEFAULT: {
+            // Check if graphics settings have been queued
+            if (auto gfx_promise = graphicsSettingsQueue_.try_pop()) {
+                // Apply settings on main thread
+                applyGraphicsSettings_(gfx_promise.value());
+            } else {
+                // Wait for graphics settings
+                std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            }
+            break;
+        }
+
+        case State::STANDBY: {
             {
                 std::lock_guard<std::mutex> lock(protocolMutex_);
                 if (protocolUpdated_) {
                     loadProtocol_();
                 }
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
-        } break;
-        case State::STANDBY: {
-            std::lock_guard<std::mutex> lock(protocolMutex_);
-            if (protocolUpdated_) {
-                loadProtocol_();
-            }
-        }
             showStandbyScreen_();
             break;
+        }
+
         case State::RUNNING: {
-            auto* render = currentTask_.as<reyer::plugin::IRender>();
+            auto *render = currentTask_.as<reyer::plugin::IRender>();
             BeginDrawing();
             ClearBackground({128, 128, 128});
             render->render();
@@ -262,11 +286,12 @@ void GraphicsManager::Run() {
             if (render->isFinished()) {
                 EnqueueCommand(net::message::Command::NEXT);
             }
-        }
             if (WindowShouldClose()) {
                 stop_requested_.store(true, std::memory_order_release);
             }
             break;
+        }
+
         case State::SAVING: {
             spdlog::info("Saving data");
             {
@@ -279,7 +304,6 @@ void GraphicsManager::Run() {
         }
         }
     }
-    spdlog::info("Exited main loop");
 }
 
 void GraphicsManager::pollCommands_() {
@@ -325,14 +349,33 @@ void GraphicsManager::Shutdown() {
 }
 
 void GraphicsManager::showStandbyScreen_() {
-    if (IsKeyPressed(KEY_S)) {
-        EnqueueCommand(net::message::Command::START);
+    std::optional<net::message::ProtocolRequest> protocol;
+    {
+        std::lock_guard<std::mutex> lock(protocolMutex_);
+        protocol = currentProtocol_;
     }
+
+    if (protocol && IsKeyPressed(KEY_S)) {
+        EnqueueCommand(net::message::Command::START);
+        return;
+    }
+
     BeginDrawing();
-    ClearBackground({128, 128, 128});
-    DrawFPS(0, 0);
-    DrawText("REYER", 300, 300, 30, RED);
-    DrawText("Press S to start", 300, 500, 30, BLACK);
+    ClearBackground({0, 0, 0});
+    if (protocol) {
+        auto protocol_text =
+            std::format("Protocol: {}\n"
+                        "ID: {}",
+                        protocol->name, protocol->protocol_uuid);
+        auto width = MeasureText(protocol_text.c_str(), 24);
+        DrawText(protocol_text.c_str(), (GetScreenWidth() - width) / 2.0f,
+                 GetScreenHeight() / 2.0f, 24, WHITE);
+
+        const char *start_prompt = "Press S to start";
+        width = MeasureText(start_prompt, 30);
+        DrawText(start_prompt, (GetScreenWidth() - width) / 2.0f,
+                 GetScreenHeight() / 2.0f + 100.0f, 30, WHITE);
+    }
     EndDrawing();
 
     if (WindowShouldClose()) {
@@ -357,12 +400,6 @@ bool GraphicsManager::SetProtocol(
         return false;
     }
 
-    // Anti-aliasing requires window reload
-    if (currentProtocol_->graphics_settings.anti_aliasing !=
-        protocol.graphics_settings.anti_aliasing) {
-        requiresWindowReload = true;
-    }
-
     currentProtocol_ = protocol;
     protocolUpdated_ = true;
 
@@ -384,6 +421,29 @@ void GraphicsManager::pollMonitors_() {
                                GetMonitorPhysicalHeight(i),
                                GetMonitorRefreshRate(i), GetMonitorName(i));
     }
+}
+
+net::message::RuntimeState GraphicsManager::GetRuntimeState() const {
+    auto current_state = state_.load(std::memory_order_acquire);
+    switch (current_state) {
+    case State::DEFAULT:
+        return net::message::RuntimeState::DEFAULT;
+    case State::STANDBY:
+        return net::message::RuntimeState::STANDBY;
+    case State::RUNNING:
+    case State::SAVING:
+        return net::message::RuntimeState::RUNNING;
+    default:
+        return net::message::RuntimeState::DEFAULT;
+    }
+}
+
+std::optional<net::message::GraphicsSettings>
+GraphicsManager::GetCurrentGraphicsSettings() const {
+    if (graphicsSettings_) {
+        return graphicsSettings_->graphics_settings;
+    }
+    return std::nullopt;
 }
 
 } // namespace reyer_rt::managers

@@ -1,7 +1,8 @@
 #include "reyer_rt/managers/broadcast_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
-#include <spdlog/spdlog.h>
+#include <cstdint>
 #include <glaze/glaze.hpp>
+#include <spdlog/spdlog.h>
 
 #include <format>
 #include <stdexcept>
@@ -16,8 +17,12 @@ void BroadcastManager::Init() {
 
     ec = pub_.Init();
     if (ec)
-        throw std::runtime_error(
-            std::format("Failed to initialize broadcast socket: {}", ec.message()));
+        throw std::runtime_error(std::format(
+            "Failed to initialize broadcast socket: {}", ec.message()));
+
+    pub_.RegisterConnectCallback([this](uint32_t id) {});
+
+    pub_.RegisterDisconnectCallback([this](uint32_t id) {});
 
     ec = pub_.Bind("ipc:///tmp/reyer-pub.sock");
     if (ec) {
@@ -36,10 +41,11 @@ void BroadcastManager::Shutdown() {
 void BroadcastManager::Run() {
     net::message::BroadcastMessage msg;
     if (!message_queue_.wait_and_pop(msg, get_stop_token())) {
-        return;  // Thread stopped
+        return; // Thread stopped
     }
     if (auto ec = glz::write_json(msg, send_buffer_)) {
-        spdlog::warn("Failed to serialize broadcast message: {}", glz::format_error(ec));
+        spdlog::warn("Failed to serialize broadcast message: {}",
+                     glz::format_error(ec));
         return;
     }
     // Actually publish the message!
@@ -48,7 +54,8 @@ void BroadcastManager::Run() {
     }
 }
 
-void BroadcastManager::Broadcast(const net::message::BroadcastMessage &message) {
+void BroadcastManager::Broadcast(
+    const net::message::BroadcastMessage &message) {
     message_queue_.push(message);
 }
 

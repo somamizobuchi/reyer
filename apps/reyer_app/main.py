@@ -13,7 +13,7 @@ from PySide6.QtGui import QIcon
 
 from src.client import ReyerClient, ClientConfig
 from src.protocol_builder import ProtocolBuilderDialog
-from src.messages import Command, Protocol, BroadcastTopic, ProtocolEvent, ProtocolEventMessage
+from src.messages import Command, ProtocolRequest, BroadcastTopic, ProtocolEvent, ProtocolEventMessage, RuntimeState
 from src.protocol_storage import ProtocolStorage
 
 # Configure logging
@@ -44,9 +44,13 @@ class ReyerMainWindow(QMainWindow):
         # Protocol state tracking
         self.current_protocol_uuid: str | None = None
         self.current_protocol_name: str | None = None
-        self.current_protocol: Protocol | None = None
+        self.current_protocol: ProtocolRequest | None = None
         self.current_task_index: int = 0
         self.total_tasks: int = 0
+
+        # Graphics initialization state
+        self.graphics_initialized = False
+        self.runtime_state = RuntimeState.DEFAULT
 
         self.init_ui()
         self.init_client()
@@ -351,32 +355,26 @@ class ReyerMainWindow(QMainWindow):
 
     def on_pipe_connected(self):
         """Handle pipe connected event from NNG."""
-        # Set connected icon and text
+        # Update UI status
         icon = QIcon(str(self.assets_dir / "circle-check.svg"))
         pixmap = icon.pixmap(QSize(24, 24))
         self.status_icon.setPixmap(pixmap)
-
         self.status_label.setText("Connected")
-        self.status_label.setStyleSheet("font-weight: bold; padding: 10px; color: green;")
-        self.new_protocol_btn.setEnabled(True)
-        self.load_protocol_btn.setEnabled(True)
-        self.exit_btn.setEnabled(True)
+        self.status_label.setStyleSheet("color: green; font-weight: bold; padding: 10px;")
 
-        # Control buttons will be updated based on protocol state
-        # Initially disabled until protocol is loaded
-        self.start_btn.setEnabled(False)
-        self.stop_btn.setEnabled(False)
-        self.next_btn.setEnabled(False)
-        self.previous_btn.setEnabled(False)
-        self.restart_btn.setEnabled(False)
+        # Query runtime state
+        self.runtime_state = self.client.get_runtime_state()
 
-        # Enable resend button if protocol is selected
-        has_selection = bool(self.protocol_list_widget.selectedItems())
-        self.resend_protocol_btn.setEnabled(has_selection)
+        if self.runtime_state == RuntimeState.DEFAULT:
+            self.log("Runtime in DEFAULT state - initializing graphics...")
+            self._initialize_graphics()
+        elif self.runtime_state == RuntimeState.STANDBY:
+            self.graphics_initialized = True
+            self.log("Runtime ready (graphics already initialized)")
+            self._enable_protocol_controls()
 
         # Subscribe to protocol events
         self.client.subscribe_to_topic(BroadcastTopic.PROTOCOL, self.handle_protocol_event)
-
         self.log("Pipe connected to Reyer RT server")
 
     def on_pipe_disconnected(self):
@@ -399,10 +397,46 @@ class ReyerMainWindow(QMainWindow):
         self.resend_protocol_btn.setEnabled(False)
         self.log("Pipe disconnected from Reyer RT server")
 
+    def _initialize_graphics(self):
+        """Show graphics settings dialog and initialize runtime."""
+        from src.graphics_settings_dialog import GraphicsSettingsDialog
+
+        monitors = self.client.get_monitors()
+        if not monitors:
+            QMessageBox.critical(self, "Error",
+                "Failed to fetch monitor information.\n"
+                "Please check the connection and try again.")
+            return
+
+        dialog = GraphicsSettingsDialog(self.client, monitors, self)
+        settings = dialog.get_settings()
+
+        if settings:
+            self.graphics_initialized = True
+            self.log("Graphics initialized successfully")
+            self._enable_protocol_controls()
+        else:
+            self.log("Graphics initialization cancelled")
+            self.client.disconnect()
+
+    def _enable_protocol_controls(self):
+        """Enable protocol-related controls after graphics initialization."""
+        self.new_protocol_btn.setEnabled(True)
+        self.load_protocol_btn.setEnabled(True)
+        self.exit_btn.setEnabled(True)
+
+        has_selection = bool(self.protocol_list_widget.selectedItems())
+        self.resend_protocol_btn.setEnabled(has_selection)
+
     def open_protocol_builder(self):
         """Open protocol builder dialog."""
         if not self.client.is_connected():
             self.log("Not connected to server")
+            return
+
+        if not self.graphics_initialized:
+            QMessageBox.warning(self, "Graphics Not Initialized",
+                "Graphics settings must be initialized before creating protocols.")
             return
 
         # Open protocol builder dialog (it will fetch its own data)
@@ -448,7 +482,7 @@ class ReyerMainWindow(QMainWindow):
             with open(file_path, 'rb') as f:
                 json_data = f.read()
 
-            protocol = msgspec.json.decode(json_data, type=Protocol)
+            protocol = msgspec.json.decode(json_data, type=ProtocolRequest)
 
             # Send protocol to server
             self.log(f"Sending protocol '{protocol.name}' to server...")
@@ -554,7 +588,13 @@ class ReyerMainWindow(QMainWindow):
         Args:
             event_msg: ProtocolEventMessage containing event type and data
         """
-        if event_msg.event == ProtocolEvent.PROTOCOL_NEW:
+        if event_msg.event == ProtocolEvent.GRAPHICS_READY:
+            self.graphics_initialized = True
+            self.runtime_state = RuntimeState.STANDBY
+            self.log("Graphics initialized and ready")
+            self._enable_protocol_controls()
+
+        elif event_msg.event == ProtocolEvent.PROTOCOL_NEW:
             self.current_protocol_uuid = event_msg.protocol_uuid
             # Match UUID to protocol in history to get name and full protocol
             for entry in self.protocol_history:
@@ -650,7 +690,7 @@ class ReyerMainWindow(QMainWindow):
 
     # Protocol Management Methods
 
-    def _add_to_history(self, protocol: Protocol):
+    def _add_to_history(self, protocol: ProtocolRequest):
         """Add a protocol to the history list."""
         history_entry = {
             'protocol': protocol,

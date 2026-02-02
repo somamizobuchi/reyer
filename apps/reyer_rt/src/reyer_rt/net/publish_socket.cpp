@@ -16,6 +16,14 @@ std::error_code PublishSocket::Publish(const std::string& data) {
     return base_.Send(data);
 }
 
+void PublishSocket::RegisterConnectCallback(detail::SocketBase::pipe_cb_t callback) {
+    base_.RegisterConnectCallback(std::move(callback));
+};
+
+void PublishSocket::RegisterDisconnectCallback(detail::SocketBase::pipe_cb_t callback) {
+    base_.RegisterDisconnectCallback(std::move(callback));
+};
+
 void PublishSocket::Shutdown() {
     base_.Close();
 }

@@ -12,8 +12,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from .client import ReyerClient
-from .messages import PluginInfo, MonitorInfo, Protocol, TaskInfo, GraphicsSettings
-from .pages import BasicInfoPage, GraphicsSettingsPage, TaskSelectionPage, TaskConfigurationPage
+from .messages import PluginInfo, MonitorInfo, ProtocolRequest, TaskInfo
+from .pages import BasicInfoPage, TaskSelectionPage, TaskConfigurationPage
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +23,8 @@ class ProtocolBuilderDialog(QDialog):
 
     # Page indices
     PAGE_BASIC_INFO = 0
-    PAGE_GRAPHICS = 1
-    PAGE_TASK_SELECTION = 2
-    PAGE_TASK_CONFIG_START = 3  # Dynamic task config pages start here
+    PAGE_TASK_SELECTION = 1
+    PAGE_TASK_CONFIG_START = 2  # Dynamic task config pages start here
 
     def __init__(
         self,
@@ -119,9 +118,6 @@ class ProtocolBuilderDialog(QDialog):
         # Create base pages
         self.basic_info_page = BasicInfoPage()
         self.stacked_widget.addWidget(self.basic_info_page)
-
-        self.graphics_page = GraphicsSettingsPage(self.monitors)
-        self.stacked_widget.addWidget(self.graphics_page)
 
         self.task_selection_page = TaskSelectionPage(self.plugins)
         self.stacked_widget.addWidget(self.task_selection_page)
@@ -286,21 +282,15 @@ class ProtocolBuilderDialog(QDialog):
                 f"Failed to build protocol: {e}"
             )
 
-    def _build_protocol(self) -> Protocol:
+    def _build_protocol(self) -> ProtocolRequest:
         """
         Build the protocol from all page data.
 
         Returns:
-            Protocol message object
+            ProtocolRequest message object
         """
         # Get basic info
         basic_info = self.basic_info_page.get_data()
-
-        # Get graphics settings
-        graphics_settings = self.graphics_page.get_data()
-
-        # Get view distance
-        view_distance_mm = self.graphics_page.get_view_distance()
 
         # Build tasks
         tasks = []
@@ -327,26 +317,24 @@ class ProtocolBuilderDialog(QDialog):
         protocol_uuid = str(uuid.uuid4())
         logger.info(f"Generated protocol UUID: {protocol_uuid}")
 
-        # Create protocol
-        protocol = Protocol(
+        # Create protocol WITHOUT graphics settings
+        protocol = ProtocolRequest(
             name=basic_info['name'],
             participant_id=basic_info['participant_id'],
             notes=basic_info['notes'],
             tasks=tasks,
-            graphics_settings=graphics_settings,
-            view_distance_mm=view_distance_mm,
             protocol_uuid=protocol_uuid
         )
 
         logger.info(f"Built protocol: {protocol.name} with {len(tasks)} tasks")
         return protocol
 
-    def build_protocol(self) -> Optional[Protocol]:
+    def build_protocol(self) -> Optional[ProtocolRequest]:
         """
         Show dialog and return built protocol.
 
         Returns:
-            Protocol object if dialog accepted, None if cancelled or resources unavailable
+            ProtocolRequest object if dialog accepted, None if cancelled or resources unavailable
         """
         # Check if resources were successfully loaded
         if not self.monitors or not self.plugins:

@@ -2,8 +2,6 @@
 
 #include "detail/socket_base.hpp"
 #include <cstddef>
-#include <vector>
-#include <cstdint>
 #include <system_error>
 
 namespace reyer_rt::net {
@@ -25,6 +23,12 @@ public:
 
     // Send a reply to the request
     std::error_code Send(const std::string& data);
+
+    // Register callback for connection
+    void RegisterConnectCallback(detail::SocketBase::pipe_cb_t callback);
+
+    // Register callback for pipe disconnect
+    void RegisterDisconnectCallback(detail::SocketBase::pipe_cb_t callback);
 
     // Shutdown the socket
     void Shutdown();

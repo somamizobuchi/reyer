@@ -16,11 +16,11 @@ struct Pong {
     uint64_t timestamp{};
 };
 
+
 struct PluginInfo {
     std::string name{};
     std::string configuration_schema{};
 };
-
 
 enum class Command : uint8_t {
     START,
@@ -52,33 +52,6 @@ struct GraphicsSettings {
     int height{1080};
 };
 
-struct ProtocolRequest {
-    std::string name{};
-    std::string participant_id{};
-    std::string notes{};
-    std::vector<experiment::Task> tasks;
-    GraphicsSettings graphics_settings{};
-    uint32_t view_distance_mm;
-    std::string protocol_uuid{};
-};
-
-struct Response {
-    bool success{};
-    int error_code{0};
-    std::string error_message;
-    std::string payload;
-};
-
-
-enum class ResourceCode : uint32_t {
-    MONITORS = 0,
-    PLUGINS,
-};
-
-struct ResourceRequest {
-    ResourceCode resource_code;
-};
-
 struct MonitorInfo {
     int index;
     int width_px;
@@ -89,15 +62,62 @@ struct MonitorInfo {
     std::string name;
 };
 
+struct GraphicsSettingsRequest {
+    GraphicsSettings graphics_settings{};
+    uint32_t view_distance_mm;
+};
+
+struct GraphicsSettingsPromise {
+    GraphicsSettingsRequest settings;
+    std::promise<std::error_code> promise;
+};
+
+struct ProtocolRequest {
+    std::string name{};
+    std::string participant_id{};
+    std::string notes{};
+    std::vector<experiment::Task> tasks;
+    std::string protocol_uuid{};
+};
+
+struct Response {
+    bool success{};
+    int error_code{0};
+    std::string error_message;
+    std::string payload;
+};
+
+enum class ResourceCode : uint32_t {
+    RUNTIME_STATE = 0,
+    AVAILABLE_MONITORS,
+    AVAILABLE_PLUGINS,
+    CURRENT_GRAPHICS_SETTINGS,
+    CURRENT_PROTOCOL,
+    CURRENT_TASK
+};
+
+struct ResourceRequest {
+    ResourceCode resource_code;
+};
+
+enum class RuntimeState : uint8_t {
+    DEFAULT = 0,
+    STANDBY = 1,
+    RUNNING = 2,
+    SAVING = 3,
+};
+
+
 enum class BroadcastTopic : uint8_t {
     LOG = 0,
     PROTOCOL,   
 };
 
 enum class ProtocolEvent : uint8_t {
-    PROTOCOL_NEW = 0,
-    TASK_START,
-    TASK_END,
+    GRAPHICS_READY = 0,
+    PROTOCOL_NEW = 1,
+    TASK_START = 2,
+    TASK_END = 3,
 };
 
 struct ProtocolEventMessage {

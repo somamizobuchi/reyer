@@ -34,6 +34,10 @@ void MessageManager::Init() {
         throw std::runtime_error(
             std::format("Failed to initialize socket: {}", ec.message()));
 
+    rep_.RegisterConnectCallback([this](uint32_t id) {});
+
+    rep_.RegisterDisconnectCallback([this](uint32_t id) {});
+
     ec = rep_.Bind("ipc:///tmp/reyer-rep.sock");
     if (ec) {
         if (ec.value() == NNG_EADDRINUSE)
@@ -73,70 +77,67 @@ std::error_code MessageManager::SendResponse(net::message::Response &response) {
     return {};
 }
 
-template<typename T>
+template <typename T>
 std::expected<std::shared_ptr<T>, std::error_code>
-MessageManager::LockManager(std::weak_ptr<T>& weak_ptr) {
+MessageManager::LockManager(std::weak_ptr<T> &weak_ptr) {
     auto shared = weak_ptr.lock();
     if (!shared) {
         return std::unexpected(
-            std::make_error_code(std::errc::resource_unavailable_try_again)
-        );
+            std::make_error_code(std::errc::resource_unavailable_try_again));
     }
     return shared;
 }
 
-net::message::Response MessageManager::CreateSuccessResponse(std::string payload) {
-    return net::message::Response{
-        .success = true,
-        .error_code = 0,
-        .error_message = "",
-        .payload = std::move(payload)
-    };
+net::message::Response
+MessageManager::CreateSuccessResponse(std::string payload) {
+    return net::message::Response{.success = true,
+                                  .error_code = 0,
+                                  .error_message = "",
+                                  .payload = std::move(payload)};
 }
 
-net::message::Response MessageManager::CreateErrorResponse(
-    std::error_code ec,
-    std::string_view context
-) {
+net::message::Response
+MessageManager::CreateErrorResponse(std::error_code ec,
+                                    std::string_view context) {
     std::string error_msg = ec.message();
     if (!context.empty()) {
         error_msg = std::format("{}: {}", context, ec.message());
     }
-    return net::message::Response{
-        .success = false,
-        .error_code = ec.value(),
-        .error_message = std::move(error_msg),
-        .payload = ""
-    };
+    return net::message::Response{.success = false,
+                                  .error_code = ec.value(),
+                                  .error_message = std::move(error_msg),
+                                  .payload = ""};
 }
 
-template<typename T>
+template <typename T>
 std::expected<std::string, std::error_code>
-MessageManager::SerializePayload(const T& data) {
+MessageManager::SerializePayload(const T &data) {
     std::string buffer;
     if (auto err = glz::write_json(data, buffer)) {
-        return std::unexpected(
-            std::make_error_code(std::errc::bad_message)
-        );
+        return std::unexpected(std::make_error_code(std::errc::bad_message));
     }
     return buffer;
 }
 
 // Template instantiations for used types
 template std::expected<std::shared_ptr<GraphicsManager>, std::error_code>
-MessageManager::LockManager(std::weak_ptr<GraphicsManager>&);
+MessageManager::LockManager(std::weak_ptr<GraphicsManager> &);
 
 template std::expected<std::shared_ptr<PluginManager>, std::error_code>
-MessageManager::LockManager(std::weak_ptr<PluginManager>&);
+MessageManager::LockManager(std::weak_ptr<PluginManager> &);
 
 template std::expected<std::string, std::error_code>
-MessageManager::SerializePayload(const net::message::Pong&);
+MessageManager::SerializePayload(const net::message::Pong &);
 
 template std::expected<std::string, std::error_code>
-MessageManager::SerializePayload(const std::vector<net::message::MonitorInfo>&);
+MessageManager::SerializePayload(
+    const std::vector<net::message::MonitorInfo> &);
 
 template std::expected<std::string, std::error_code>
-MessageManager::SerializePayload(const std::vector<net::message::PluginInfo>&);
+MessageManager::SerializePayload(const std::vector<net::message::PluginInfo> &);
+
+template std::expected<std::string, std::error_code>
+MessageManager::SerializePayload(const net::message::GraphicsSettings &);
 
 void MessageManager::Run() {
     auto ec = rep_.Receive(recv_buffer_);
@@ -173,8 +174,7 @@ void MessageManager::Run() {
 }
 
 std::expected<net::message::Response, std::error_code>
-MessageManager::MessageVisitor::operator()(
-    const net::message::Ping &ping) {
+MessageManager::MessageVisitor::operator()(const net::message::Ping &ping) {
 
     // Create Pong message
     net::message::Pong pong{ping.timestamp};
@@ -191,12 +191,45 @@ MessageManager::MessageVisitor::operator()(
 
 std::expected<net::message::Response, std::error_code>
 MessageManager::MessageVisitor::operator()(
+    const net::message::GraphicsSettingsRequest &request) {
+
+    auto graphics_manager = manager.LockManager(manager.graphics_manager_);
+    if (!graphics_manager) {
+        return std::unexpected(graphics_manager.error());
+    }
+
+    // Only allow in DEFAULT state
+    auto state = graphics_manager.value()->GetRuntimeState();
+    if (state != net::message::RuntimeState::DEFAULT) {
+        return std::unexpected(
+            std::make_error_code(std::errc::operation_not_permitted));
+    }
+
+    // Set graphics settings and wait for completion on main thread
+    auto future = graphics_manager.value()->SetGraphicsSettings(request);
+    auto ec = future.get();
+    if (ec) {
+        return std::unexpected(ec);
+    }
+
+    return manager.CreateSuccessResponse();
+}
+
+std::expected<net::message::Response, std::error_code>
+MessageManager::MessageVisitor::operator()(
     const net::message::ProtocolRequest &request) {
 
     // Lock graphics manager
     auto graphics_manager = manager.LockManager(manager.graphics_manager_);
     if (!graphics_manager) {
         return std::unexpected(graphics_manager.error());
+    }
+
+    // Check if graphics are initialized
+    auto state = graphics_manager.value()->GetRuntimeState();
+    if (state == net::message::RuntimeState::DEFAULT) {
+        return std::unexpected(
+            std::make_error_code(std::errc::operation_not_supported));
     }
 
     // Lock plugin manager
@@ -208,9 +241,7 @@ MessageManager::MessageVisitor::operator()(
     // Check if plugins are available
     auto available = plugin_manager.value()->GetAvailablePlugins();
     if (available.empty()) {
-        return std::unexpected(
-            std::make_error_code(std::errc::no_message)
-        );
+        return std::unexpected(std::make_error_code(std::errc::no_message));
     }
 
     auto protocol = request;
@@ -218,8 +249,7 @@ MessageManager::MessageVisitor::operator()(
     for (auto &task : request.tasks) {
         auto p = plugin_manager.value()->GetPlugin(task.name);
         if (!p) {
-            spdlog::warn(" constructing protocol: {}",
-                         p.error().message());
+            spdlog::warn(" constructing protocol: {}", p.error().message());
         }
         protocol.tasks.emplace_back(task.name, task.configuration);
     }
@@ -233,16 +263,15 @@ MessageManager::MessageVisitor::operator()(
     // Set protocol on graphics manager
     if (!graphics_manager.value()->SetProtocol(protocol)) {
         return std::unexpected(
-            std::make_error_code(std::errc::device_or_resource_busy)
-        );
+            std::make_error_code(std::errc::device_or_resource_busy));
     }
 
-    // Return success response (this was missing in the original!)
     return manager.CreateSuccessResponse();
 }
 
 std::expected<net::message::Response, std::error_code>
-MessageManager::MessageVisitor::operator()(const net::message::CommandRequest &request) {
+MessageManager::MessageVisitor::operator()(
+    const net::message::CommandRequest &request) {
     auto graphics_manager = manager.LockManager(manager.graphics_manager_);
     if (!graphics_manager) {
         return std::unexpected(graphics_manager.error());
@@ -257,19 +286,30 @@ MessageManager::MessageVisitor::operator()(const net::message::CommandRequest &r
     return manager.CreateSuccessResponse();
 }
 
-
 std::expected<net::message::Response, std::error_code>
 MessageManager::MessageVisitor::operator()(
     const net::message::ResourceRequest &request) {
 
-    switch (request.resource_code) {
-    case net::message::ResourceCode::MONITORS: {
-        // Lock graphics manager
-        auto graphics_manager = manager.LockManager(manager.graphics_manager_);
-        if (!graphics_manager) {
-            return std::unexpected(graphics_manager.error());
-        }
+    auto graphics_manager = manager.LockManager(manager.graphics_manager_);
+    if (!graphics_manager) {
+        return std::unexpected(graphics_manager.error());
+    }
 
+    // Lock plugin manager
+    auto plugin_manager = manager.LockManager(manager.plugin_manager_);
+    if (!plugin_manager) {
+        return std::unexpected(plugin_manager.error());
+    }
+
+    switch (request.resource_code) {
+
+    case net::message::ResourceCode::RUNTIME_STATE: {
+        auto state = graphics_manager.value()->GetRuntimeState();
+        std::string state_json = std::to_string(static_cast<int>(state));
+        return manager.CreateSuccessResponse(state_json);
+    }
+
+    case net::message::ResourceCode::AVAILABLE_MONITORS: {
         // Get monitor info
         auto info = graphics_manager.value()->GetMonitorInfo();
 
@@ -283,24 +323,17 @@ MessageManager::MessageVisitor::operator()(
         return manager.CreateSuccessResponse(std::move(payload.value()));
     }
 
-    case net::message::ResourceCode::PLUGINS: {
-        // Lock plugin manager
-        auto plugin_manager = manager.LockManager(manager.plugin_manager_);
-        if (!plugin_manager) {
-            return std::unexpected(plugin_manager.error());
-        }
-
+    case net::message::ResourceCode::AVAILABLE_PLUGINS: {
         // Build plugin info vector
         std::vector<net::message::PluginInfo> info;
         auto plugins = plugin_manager.value()->GetAvailablePlugins();
-        for (auto const &plugin: plugins) {
+        for (auto const &plugin : plugins) {
             auto p = plugin_manager.value()->GetPlugin(plugin);
             if (p) {
                 auto schema = p->get()->getConfigSchema();
-                info.emplace_back(
-                    std::string(p->getName()),
-                    schema ? std::string(schema) : std::string("{}")
-                );
+                info.emplace_back(std::string(p->getName()),
+                                  schema ? std::string(schema)
+                                         : std::string("{}"));
             }
         }
 
@@ -314,12 +347,29 @@ MessageManager::MessageVisitor::operator()(
         return manager.CreateSuccessResponse(std::move(payload.value()));
     }
 
-    default:
-        // Return error for unknown resource code
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument)
-        );
+    case net::message::ResourceCode::CURRENT_GRAPHICS_SETTINGS: {
+        auto settings = graphics_manager.value()->GetCurrentGraphicsSettings();
+        if (!settings) {
+            return std::unexpected(
+                std::make_error_code(std::errc::no_message));
+        }
+        auto payload = manager.SerializePayload(settings.value());
+        if (!payload) {
+            return std::unexpected(payload.error());
+        }
+        return manager.CreateSuccessResponse(std::move(payload.value()));
     }
+
+    case net::message::ResourceCode::CURRENT_PROTOCOL: {
+        // TODO: get protocol
+    }
+
+    case net::message::ResourceCode::CURRENT_TASK: {
+        // TODO: get task
+    }
+    }
+
+    return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 }
 
 } // namespace reyer_rt::managers
