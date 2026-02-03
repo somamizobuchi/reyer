@@ -5,7 +5,6 @@
 #include <nng/protocol/reqrep0/rep.h>
 #include <nng/protocol/reqrep0/req.h>
 #include <spdlog/spdlog.h>
-#include <print>
 
 namespace reyer_rt::net::detail {
 
@@ -36,7 +35,7 @@ std::error_code SocketBase::Init(SocketType type) {
     nng_pipe_notify(socket_, NNG_PIPE_EV_REM_POST, &SocketBase::handlePipeNotify_, this);
 
     if (ret != 0) {
-        std::println("Failed to open socket: {}", nng_strerror(ret));
+        spdlog::error("Failed to open socket: {}", nng_strerror(ret));
         return make_error_code(ret);
     }
 
@@ -142,6 +141,7 @@ void SocketBase::Close() {
 
     if (msg_) {
         nng_msg_free(msg_);
+        msg_ = nullptr;
     }
 }
 

@@ -79,10 +79,6 @@ class Plugin {
         if constexpr (std::is_same_v<T, IRender>) {
             return render_;
         }
-        // Add more specializations as needed:
-        // else if constexpr (std::is_same_v<T, ISource>) {
-        //     return source_;
-        // }
         else {
             return nullptr;
         }

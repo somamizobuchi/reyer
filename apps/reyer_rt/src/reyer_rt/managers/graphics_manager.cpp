@@ -278,6 +278,11 @@ void GraphicsManager::Run() {
 
         case State::RUNNING: {
             auto *render = currentTask_.as<reyer::plugin::IRender>();
+            if (!render) {
+                spdlog::error("No valid render plugin loaded");
+                state_.store(State::SAVING, std::memory_order_release);
+                break;
+            }
             BeginDrawing();
             ClearBackground({128, 128, 128});
             render->render();
@@ -304,6 +309,7 @@ void GraphicsManager::Run() {
         }
         }
     }
+    Shutdown();
 }
 
 void GraphicsManager::pollCommands_() {
@@ -342,7 +348,13 @@ void GraphicsManager::pollCommands_() {
 }
 
 void GraphicsManager::Shutdown() {
-    spdlog::info("Shutting down");
+    // Shut down and release the plugin BEFORE closing the window
+    // Plugin may have OpenGL resources that need a valid context to destroy
+    if (currentTask_) {
+        currentTask_->shutdown();
+        currentTask_ = reyer::plugin::Plugin();
+    }
+
     if (IsWindowReady()) {
         CloseWindow();
     }

@@ -1,6 +1,7 @@
-find_package(raylib CONFIG REQUIRED)
-
 include(FetchContent)
+
+find_package(raylib REQUIRED)
+
 # GLAZE JSON
 FetchContent_Declare(
     glaze

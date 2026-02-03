@@ -32,4 +32,6 @@ target_include_directories(${PROJECT_NAME}
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>
 )
 
+target_link_options(${PROJECT_NAME} PRIVATE -rdynamic)
+
 add_subdirectory(tests)

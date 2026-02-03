@@ -1,0 +1,39 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "default",
+            "displayName": "Default Configure Preset",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_BUILD_TYPE": "Debug"
+            }
+        },
+        {
+            "name": "release",
+            "displayName": "Release Configure Preset",
+            "inherits": [ "default" ],
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        },
+        {
+            "name": "clang-20",
+            "displayName": "Clang 20 Configure Preset",
+            "inherits": [ "default" ],
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "/usr/bin/clang-20",
+                "CMAKE_CXX_COMPILER": "/usr/bin/clang++-20",
+                "CMAKE_CXX_FLAGS": "-stdlib=libc++"
+            }
+        }
+
+    ]
+}

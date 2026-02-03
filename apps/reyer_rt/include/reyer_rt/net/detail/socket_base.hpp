@@ -116,7 +116,7 @@ private:
     pipe_cb_t connect_cb_;
     pipe_cb_t disconnect_cb_;
 
-    nng_msg* msg_;
+    nng_msg* msg_ = nullptr;
 
     static void handlePipeNotify_(nng_pipe pipe, nng_pipe_ev event, void *user_data);
 };

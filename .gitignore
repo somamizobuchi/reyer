@@ -3,4 +3,4 @@ build/
 .claude/
 .DS_Store
 CLAUDE.md
-**/*/__pycache__/
+**/__pycache__/

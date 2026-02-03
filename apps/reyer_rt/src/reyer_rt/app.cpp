@@ -37,8 +37,11 @@ void App::Launch() {
 
     graphicsManager_->Run();
 
+    spdlog::info("Shutting down application...");
     broadcastManager_->Stop();
+    spdlog::info("Broadcast manager stopped");
     messageManager_->Stop();
+    spdlog::info("Message manager stopped");
 }
 
 App::~App() {

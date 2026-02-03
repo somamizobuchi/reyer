@@ -16,6 +16,7 @@ namespace reyer_rt::managers {
 class PluginManager {
   public:
     explicit PluginManager(const std::filesystem::path &plugins_dir);
+    ~PluginManager() = default;
 
     std::error_code LoadPlugin(const std::string &path);
 
