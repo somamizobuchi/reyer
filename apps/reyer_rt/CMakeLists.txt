@@ -7,16 +7,16 @@ include(Dependencies)
 
 target_sources(${PROJECT_NAME}
     PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/app.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/managers/graphics_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/managers/plugin_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/managers/message_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/managers/broadcast_manager.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/net/detail/socket_base.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/net/reply_socket.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/net/request_socket.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/net/publish_socket.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/reyer_rt/net/subscribe_socket.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/app.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/graphics_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/plugin_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/message_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/broadcast_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/net/detail/socket_base.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/net/reply_socket.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/net/request_socket.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/net/publish_socket.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/net/subscribe_socket.cpp
 )
 
 target_link_libraries(${PROJECT_NAME} 
