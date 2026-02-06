@@ -220,7 +220,7 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     }
 
     // Verify it's a render plugin
-    if (plugin.value()->getType() != reyer::plugin::PluginType::RENDER) {
+    if (!plugin.value().as<reyer::plugin::IRender>()) {
         spdlog::error("Task \"{}\" is not a render plugin", task.name);
         currentTask_ = reyer::plugin::Plugin();
         state_.store(State::SAVING, std::memory_order_release);
@@ -231,7 +231,9 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     currentTaskIndex_ = nextIndex;
     spdlog::info("Set current task to \"{}\"", currentTask_.getName());
     spdlog::info("Configuring task \"{}\"", currentTask_.getName());
-    currentTask_->setConfigStr(task.configuration.c_str());
+    if (auto *configurable = currentTask_.as<reyer::plugin::IConfigurable>()) {
+        configurable->setConfigStr(task.configuration.c_str());
+    }
 
     spdlog::info("Initializing task \"{}\"", currentTask_.getName());
     currentTask_->init();

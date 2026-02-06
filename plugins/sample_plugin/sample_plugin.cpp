@@ -1,7 +1,7 @@
 #include "configuration.hpp"
 #include "reyer/core/core.hpp"
-#include "reyer/plugin/defs.hpp"
-#include "reyer/plugin/iplugin.hpp"
+#include "reyer/plugin/loader.hpp"
+#include "reyer/plugin/interfaces.hpp"
 #include <ranges>
 #include <raylib.h>
 
@@ -21,11 +21,13 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
 
     virtual void onRender() override {
         DrawFPS(10, 10);
-        DrawRectanglePro({GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, 100, 100}, {50, 50}, 0,getConfiguration().square_color);
+        DrawRectanglePro(
+            {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, 100, 100},
+            {50, 50}, 0, getConfig().square_color);
     }
 
-    virtual void onData(std::span<const core::Data> data) override {
-        auto view = data | std::views::transform(&core::Data::left);
+    virtual void onProcess(std::span<core::EyeData> data) override {
+        auto view = data | std::views::transform(&core::EyeData::left);
     }
 };
 }; // namespace reyer::plugin

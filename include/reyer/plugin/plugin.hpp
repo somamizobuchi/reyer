@@ -1,4 +1,4 @@
 #pragma once
 
-#include "iplugin.hpp"
-#include "defs.hpp"
+#include "interfaces.hpp"
+#include "loader.hpp"

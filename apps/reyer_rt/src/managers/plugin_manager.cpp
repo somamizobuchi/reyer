@@ -2,12 +2,12 @@
 #include <algorithm>
 #include <dlfcn.h>
 #include <filesystem>
-#include <system_error>
 #include <spdlog/spdlog.h>
+#include <system_error>
 
 namespace reyer_rt::managers {
 
-PluginManager::PluginManager(const std::filesystem::path& plugins_dir) {
+PluginManager::PluginManager(const std::filesystem::path &plugins_dir) {
     LoadPluginsFromDirectory_(plugins_dir);
 }
 
@@ -30,7 +30,8 @@ std::error_code PluginManager::LoadPlugin(const std::string &path) {
         return std::make_error_code(std::errc::executable_format_error);
     }
 
-    reyer::plugin::Plugin plugin(handle, createPlugin, destroyPlugin, getName());
+    reyer::plugin::Plugin plugin(handle, createPlugin, destroyPlugin,
+                                 getName());
 
     if (!plugin.get()) {
         return std::make_error_code(std::errc::executable_format_error);
@@ -47,26 +48,26 @@ std::error_code PluginManager::LoadPlugin(const std::string &path) {
 }
 
 std::expected<reyer::plugin::Plugin, std::error_code>
-PluginManager::GetPlugin(const std::string& name){
+PluginManager::GetPlugin(const std::string &name) {
     std::shared_lock lock(plugins_mutex_);
     auto it = plugins_.find(name);
     if (it == plugins_.end()) {
-        return std::unexpected(std::make_error_code(std::errc::no_such_device_or_address));
+        return std::unexpected(
+            std::make_error_code(std::errc::no_such_device_or_address));
     }
-    return it->second;  // Returns copy, shares ownership via shared_ptr
+    return it->second; // Returns copy, shares ownership via shared_ptr
 }
-
 
 std::vector<std::string> PluginManager::GetAvailablePlugins() {
     std::shared_lock lock(plugins_mutex_);
     std::vector<std::string> plugins;
-    for (auto const& [key, _]: plugins_) {
+    for (auto const &[key, _] : plugins_) {
         plugins.emplace_back(key);
     }
     return plugins;
 }
 
-const std::vector<std::pair<std::string, std::error_code>>&
+const std::vector<std::pair<std::string, std::error_code>> &
 PluginManager::GetLoadErrors() const {
     return load_errors_;
 }
@@ -81,7 +82,8 @@ std::error_code PluginManager::UnloadPlugin(const std::string &name) {
     return {};
 }
 
-void PluginManager::LoadPluginsFromDirectory_(const std::filesystem::path& dir) {
+void PluginManager::LoadPluginsFromDirectory_(
+    const std::filesystem::path &dir) {
     std::error_code ec;
     if (!std::filesystem::exists(dir, ec)) {
         spdlog::warn("Plugins directory does not exist: {}", dir.string());
@@ -94,31 +96,37 @@ void PluginManager::LoadPluginsFromDirectory_(const std::filesystem::path& dir) 
     }
 
     try {
-        for (const auto& entry : std::filesystem::directory_iterator(dir)) {
-            if (!entry.is_directory(ec)) continue;
+        for (const auto &entry : std::filesystem::directory_iterator(dir)) {
+            if (!entry.is_directory(ec))
+                continue;
 
-            const auto& subdir = entry.path();
-            for (const auto& file : std::filesystem::directory_iterator(subdir)) {
-                if (!file.is_regular_file(ec)) continue;
+            const auto &subdir = entry.path();
+            for (const auto &file :
+                 std::filesystem::directory_iterator(subdir)) {
+                if (!file.is_regular_file(ec))
+                    continue;
 
                 if (IsPluginLibrary_(file.path())) {
                     auto load_ec = LoadPlugin(file.path().string());
                     if (load_ec) {
-                        load_errors_.emplace_back(file.path().string(), load_ec);
+                        load_errors_.emplace_back(file.path().string(),
+                                                  load_ec);
                         spdlog::warn("Failed to load plugin {}: {}",
-                                     file.path().filename().string(), load_ec.message());
+                                     file.path().filename().string(),
+                                     load_ec.message());
                     } else {
-                        spdlog::info("Loaded plugin: {}", file.path().filename().string());
+                        spdlog::info("Loaded plugin: {}",
+                                     file.path().filename().string());
                     }
                 }
             }
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         spdlog::error("Error scanning plugins directory: {}", e.what());
     }
 }
 
-bool PluginManager::IsPluginLibrary_(const std::filesystem::path& file) {
+bool PluginManager::IsPluginLibrary_(const std::filesystem::path &file) {
     auto extension = file.extension().string();
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char c) { return std::tolower(c); });

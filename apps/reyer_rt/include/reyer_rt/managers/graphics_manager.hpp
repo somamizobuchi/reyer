@@ -7,7 +7,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <string>
 #include <system_error>
 
 #include "reyer_rt/managers/broadcast_manager.hpp"
@@ -15,7 +14,7 @@
 #include "reyer_rt/net/message_types.hpp"
 #include <reyer/core/queue.hpp>
 #include <reyer/graphics/graphics.hpp>
-#include <reyer/plugin/defs.hpp>
+#include <reyer/plugin/loader.hpp>
 #include <vector>
 
 namespace reyer_rt::managers {

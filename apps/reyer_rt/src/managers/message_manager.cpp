@@ -330,10 +330,15 @@ MessageManager::MessageVisitor::operator()(
         for (auto const &plugin : plugins) {
             auto p = plugin_manager.value()->GetPlugin(plugin);
             if (p) {
-                auto schema = p->get()->getConfigSchema();
-                info.emplace_back(std::string(p->getName()),
-                                  schema ? std::string(schema)
-                                         : std::string("{}"));
+                std::string schema_str = "{}";
+                if (auto *configurable =
+                        p->as<reyer::plugin::IConfigurable>()) {
+                    auto schema = configurable->getConfigSchema();
+                    if (schema) {
+                        schema_str = schema;
+                    }
+                }
+                info.emplace_back(std::string(p->getName()), schema_str);
             }
         }
 

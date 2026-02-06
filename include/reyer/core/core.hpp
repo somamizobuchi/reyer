@@ -1,24 +1,28 @@
 #pragma once
 
-#include <cstdint>
 #include "vec2.hpp"
+#include <cstdint>
 
 namespace reyer::core {
 
-    struct UserEvent {
-        uint64_t timestamp;
-        int event;
-    };
+struct UserEvent {
+    uint64_t timestamp;
+    int event;
+};
 
-    struct EyeData {
-        vec2<float> p1;
-        vec2<float> p4;
-        vec2<float> gaze;
-    };
+struct DpiData {
+    vec2<float> p1;
+    vec2<float> p4;
+    vec2<float> gaze;
+};
 
-    struct Data {
-        EyeData left;
-        EyeData right;
-        double timestamp;
-    };
-}
+struct EyeData {
+    DpiData left;
+    DpiData right;
+    uint64_t timestamp;
+};
+
+struct RenderContext {
+    uint32_t screen_distance_mm;
+};
+} // namespace reyer::core

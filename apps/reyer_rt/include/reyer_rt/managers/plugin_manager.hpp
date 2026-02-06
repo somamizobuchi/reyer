@@ -1,6 +1,6 @@
 #pragma once
 
-#include "reyer/plugin/defs.hpp"
+#include "reyer/plugin/loader.hpp"
 #include <expected>
 #include <reyer/plugin/plugin.hpp>
 
