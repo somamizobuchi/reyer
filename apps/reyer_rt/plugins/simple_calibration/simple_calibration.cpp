@@ -1,4 +1,5 @@
 #include "reyer/core/core.hpp"
+#include "reyer/core/utils.hpp"
 #include "reyer/plugin/interfaces.hpp"
 #include "reyer/plugin/loader.hpp"
 #include <raylib.h>
@@ -8,8 +9,9 @@
 namespace reyer::plugin {
 
 struct SimpleCalibrationConfig {
-    float point_radius = 10.0f;
-    float margin_ratio = 0.1f; // fraction of screen width/height for margin
+    float stimulus_size_arcmin = 10.0f;
+    float grid_spacing_degrees =
+        0.1f; // fraction of screen width/height for margin
 };
 
 class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
@@ -31,7 +33,7 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         float my = h * getConfig().margin_ratio;
 
         // 3x3 grid positions
-        float xs[3] = {mx, w * 0.5f, w - mx};
+        float xs[3] = {getRenderContext()., w * 0.5f, w - mx};
         float ys[3] = {my, h * 0.5f, h - my};
 
         grid_points_.clear();

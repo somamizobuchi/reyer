@@ -45,7 +45,8 @@ class GraphicsManager {
 
     net::message::RuntimeState GetRuntimeState() const;
 
-    std::optional<net::message::GraphicsSettings> GetCurrentGraphicsSettings() const;
+    std::optional<net::message::GraphicsSettings>
+    GetCurrentGraphicsSettings() const;
 
     std::vector<net::message::MonitorInfo> monitors_;
 
@@ -59,13 +60,7 @@ class GraphicsManager {
         SAVING,
     };
 
-    enum class LoadCommand : uint8_t {
-        FIRST,
-        NEXT,
-        PREV,
-        LAST,
-        FINISH
-    };
+    enum class LoadCommand : uint8_t { FIRST, NEXT, PREV, LAST, FINISH };
 
     std::atomic<State> state_{};
 
@@ -77,11 +72,12 @@ class GraphicsManager {
 
     void loadProtocol_();
 
-    void loadTask_(const LoadCommand& command);
+    void loadTask_(const LoadCommand &command);
 
     void showStandbyScreen_();
 
-    void applyGraphicsSettings_(net::message::GraphicsSettingsPromise &gfx_promise);
+    void
+    applyGraphicsSettings_(net::message::GraphicsSettingsPromise &gfx_promise);
 
     static void errorCallback_(int code, const char *message, va_list args);
 
@@ -102,8 +98,11 @@ class GraphicsManager {
     reyer::plugin::Plugin currentTask_;
     size_t currentTaskIndex_{0};
 
+    reyer::core::RenderContext renderContext_;
+
     reyer::core::Queue<net::message::CommandPromise> commandQueue_;
-    reyer::core::Queue<net::message::GraphicsSettingsPromise> graphicsSettingsQueue_;
+    reyer::core::Queue<net::message::GraphicsSettingsPromise>
+        graphicsSettingsQueue_;
 };
 
 } // namespace reyer_rt::managers

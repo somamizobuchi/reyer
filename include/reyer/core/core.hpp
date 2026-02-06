@@ -38,5 +38,9 @@ struct EyeData {
 
 struct RenderContext {
     uint32_t screen_distance_mm;
+    uint32_t screen_width_mm;
+    uint32_t screen_height_mm;
+    double ppd_x;
+    double ppd_y;
 };
 } // namespace reyer::core

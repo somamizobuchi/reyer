@@ -10,6 +10,7 @@
 #include <future>
 #include <memory>
 #include <mutex>
+#include <numbers>
 #include <raylib.h>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
@@ -125,6 +126,19 @@ void GraphicsManager::applyGraphicsSettings_(
         bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
     }
 
+    auto mw = static_cast<uint32_t>(GetMonitorPhysicalWidth(gs.monitor_index));
+    auto mh = static_cast<uint32_t>(GetMonitorPhysicalHeight(gs.monitor_index));
+    // Store render context
+    renderContext_ = reyer::core::RenderContext{
+        settings.view_distance_mm,
+        mw,
+        mh,
+        std::atan2(mw, settings.view_distance_mm) * 180.0 / std::numbers::pi /
+            (static_cast<double>(gs.width) / 2.0),
+        std::atan2(mh, settings.view_distance_mm) * 180.0 / std::numbers::pi /
+            (static_cast<double>(gs.width) / 2.0),
+    };
+
     spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
                  gs.target_fps);
 }
@@ -239,6 +253,10 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
 
     spdlog::info("Initializing task \"{}\"", currentTask_.getName());
     currentTask_->init();
+    if (auto *render = currentTask_.as<reyer::plugin::IRender>()) {
+        render->setRenderContext(
+            reyer::core::RenderContext{graphicsSettings_->view_distance_mm});
+    }
 
     // Set current task as pipeline sink
     if (auto pipeline_mgr = pipelineManager_.lock()) {
