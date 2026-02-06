@@ -13,6 +13,7 @@
 #include <glaze/json/read.hpp>
 #include <glaze/json/write.hpp>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string_view>
 #include <system_error>
@@ -22,9 +23,11 @@ namespace reyer_rt::managers {
 
 MessageManager::MessageManager(
     std::shared_ptr<GraphicsManager> &graphics_manager,
-    std::shared_ptr<PluginManager> &plugin_manager)
+    std::shared_ptr<PluginManager> &plugin_manager,
+    std::shared_ptr<PipelineManager> &pipeline_manager)
     : message_visitor_(*this), graphics_manager_(graphics_manager),
-      plugin_manager_(plugin_manager) {};
+      plugin_manager_(plugin_manager),
+      pipeline_manager_(pipeline_manager) {};
 
 void MessageManager::Init() {
     std::error_code ec{};
@@ -126,6 +129,9 @@ MessageManager::LockManager(std::weak_ptr<GraphicsManager> &);
 template std::expected<std::shared_ptr<PluginManager>, std::error_code>
 MessageManager::LockManager(std::weak_ptr<PluginManager> &);
 
+template std::expected<std::shared_ptr<PipelineManager>, std::error_code>
+MessageManager::LockManager(std::weak_ptr<PipelineManager> &);
+
 template std::expected<std::string, std::error_code>
 MessageManager::SerializePayload(const net::message::Pong &);
 
@@ -138,6 +144,32 @@ MessageManager::SerializePayload(const std::vector<net::message::PluginInfo> &);
 
 template std::expected<std::string, std::error_code>
 MessageManager::SerializePayload(const net::message::GraphicsSettings &);
+
+std::expected<net::message::Response, std::error_code>
+MessageManager::BuildPluginInfoResponse(
+    const std::vector<std::string> &plugin_names,
+    std::shared_ptr<PluginManager> &plugin_manager) {
+    std::vector<net::message::PluginInfo> info;
+    for (const auto &name : plugin_names) {
+        auto p = plugin_manager->GetPlugin(name);
+        if (p) {
+            std::string schema_str = "{}";
+            if (auto *configurable = p->as<reyer::plugin::IConfigurable>()) {
+                auto schema = configurable->getConfigSchema();
+                if (schema) {
+                    schema_str = schema;
+                }
+            }
+            info.emplace_back(std::string(p->getName()), schema_str);
+        }
+    }
+
+    auto payload = SerializePayload(info);
+    if (!payload) {
+        return std::unexpected(payload.error());
+    }
+    return CreateSuccessResponse(std::move(payload.value()));
+}
 
 void MessageManager::Run() {
     auto ec = rep_.Receive(recv_buffer_);
@@ -238,8 +270,8 @@ MessageManager::MessageVisitor::operator()(
         return std::unexpected(plugin_manager.error());
     }
 
-    // Check if plugins are available
-    auto available = plugin_manager.value()->GetAvailablePlugins();
+    // Check if tasks are available
+    auto available = plugin_manager.value()->GetAvailableTasks();
     if (available.empty()) {
         return std::unexpected(std::make_error_code(std::errc::no_message));
     }
@@ -266,6 +298,63 @@ MessageManager::MessageVisitor::operator()(
             std::make_error_code(std::errc::device_or_resource_busy));
     }
 
+    return manager.CreateSuccessResponse();
+}
+
+std::expected<net::message::Response, std::error_code>
+MessageManager::MessageVisitor::operator()(
+    const net::message::PipelineConfigRequest &request) {
+
+    auto plugin_manager = manager.LockManager(manager.plugin_manager_);
+    if (!plugin_manager)
+        return std::unexpected(plugin_manager.error());
+
+    auto pipeline_manager = manager.LockManager(manager.pipeline_manager_);
+    if (!pipeline_manager)
+        return std::unexpected(pipeline_manager.error());
+
+    // Resolve source plugin
+    auto source = plugin_manager.value()->GetPlugin(request.pipeline_source);
+    if (!source) {
+        spdlog::warn("Pipeline source '{}' not found",
+                     request.pipeline_source);
+        return manager.CreateErrorResponse(source.error(), "source not found");
+    }
+
+    // Resolve calibration plugin (optional)
+    std::optional<reyer::plugin::Plugin> calibration;
+    if (!request.pipeline_calibration.empty()) {
+        auto cal = plugin_manager.value()->GetPlugin(request.pipeline_calibration);
+        if (cal)
+            calibration = cal.value();
+        else
+            spdlog::warn("Pipeline calibration '{}' not found",
+                         request.pipeline_calibration);
+    }
+
+    // Resolve filter plugin (optional)
+    std::optional<reyer::plugin::Plugin> filter;
+    if (!request.pipeline_filter.empty()) {
+        auto flt = plugin_manager.value()->GetPlugin(request.pipeline_filter);
+        if (flt)
+            filter = flt.value();
+        else
+            spdlog::warn("Pipeline filter '{}' not found",
+                         request.pipeline_filter);
+    }
+
+    // Resolve stage plugins
+    std::vector<reyer::plugin::Plugin> stages;
+    for (const auto &stage_name : request.pipeline_stages) {
+        auto stage = plugin_manager.value()->GetPlugin(stage_name);
+        if (stage)
+            stages.push_back(stage.value());
+        else
+            spdlog::warn("Pipeline stage '{}' not found", stage_name);
+    }
+
+    pipeline_manager.value()->Configure(source.value(), std::move(calibration),
+                                        std::move(filter), std::move(stages));
     return manager.CreateSuccessResponse();
 }
 
@@ -323,46 +412,52 @@ MessageManager::MessageVisitor::operator()(
         return manager.CreateSuccessResponse(std::move(payload.value()));
     }
 
-    case net::message::ResourceCode::AVAILABLE_PLUGINS: {
-        // Build plugin info vector
-        std::vector<net::message::PluginInfo> info;
-        auto plugins = plugin_manager.value()->GetAvailablePlugins();
-        for (auto const &plugin : plugins) {
-            auto p = plugin_manager.value()->GetPlugin(plugin);
-            if (p) {
-                std::string schema_str = "{}";
-                if (auto *configurable =
-                        p->as<reyer::plugin::IConfigurable>()) {
-                    auto schema = configurable->getConfigSchema();
-                    if (schema) {
-                        schema_str = schema;
-                    }
-                }
-                info.emplace_back(std::string(p->getName()), schema_str);
-            }
-        }
+    case net::message::ResourceCode::AVAILABLE_SOURCES: {
+        return manager.BuildPluginInfoResponse(
+            plugin_manager.value()->GetAvailableSources(),
+            plugin_manager.value());
+    }
 
-        // Serialize plugin info
-        auto payload = manager.SerializePayload(info);
-        if (!payload) {
-            return std::unexpected(payload.error());
-        }
+    case net::message::ResourceCode::AVAILABLE_STAGES: {
+        return manager.BuildPluginInfoResponse(
+            plugin_manager.value()->GetAvailableStages(),
+            plugin_manager.value());
+    }
 
-        // Return success response with payload
-        return manager.CreateSuccessResponse(std::move(payload.value()));
+    case net::message::ResourceCode::AVAILABLE_SINKS: {
+        return manager.BuildPluginInfoResponse(
+            plugin_manager.value()->GetAvailableSinks(),
+            plugin_manager.value());
+    }
+
+    case net::message::ResourceCode::AVAILABLE_TASKS: {
+        return manager.BuildPluginInfoResponse(
+            plugin_manager.value()->GetAvailableTasks(),
+            plugin_manager.value());
     }
 
     case net::message::ResourceCode::CURRENT_GRAPHICS_SETTINGS: {
         auto settings = graphics_manager.value()->GetCurrentGraphicsSettings();
         if (!settings) {
-            return std::unexpected(
-                std::make_error_code(std::errc::no_message));
+            return std::unexpected(std::make_error_code(std::errc::no_message));
         }
         auto payload = manager.SerializePayload(settings.value());
         if (!payload) {
             return std::unexpected(payload.error());
         }
         return manager.CreateSuccessResponse(std::move(payload.value()));
+    }
+
+    case net::message::ResourceCode::AVAILABLE_CALIBRATIONS: {
+        return manager.BuildPluginInfoResponse(
+            plugin_manager.value()->GetAvailableCalibrations(),
+            plugin_manager.value());
+    }
+
+    case net::message::ResourceCode::AVAILABLE_FILTERS: {
+        return manager.BuildPluginInfoResponse(
+            plugin_manager.value()->GetAvailableFilters(),
+            plugin_manager.value());
     }
 
     case net::message::ResourceCode::CURRENT_PROTOCOL: {

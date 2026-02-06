@@ -21,8 +21,10 @@ namespace reyer_rt::managers {
 
 GraphicsManager::GraphicsManager(
     std::shared_ptr<PluginManager> &plugin_manager,
-    std::shared_ptr<BroadcastManager> &broadcast_manager)
-    : pluginManager_(plugin_manager), broadcastManager_(broadcast_manager) {}
+    std::shared_ptr<BroadcastManager> &broadcast_manager,
+    std::shared_ptr<PipelineManager> &pipeline_manager)
+    : pluginManager_(plugin_manager), broadcastManager_(broadcast_manager),
+      pipelineManager_(pipeline_manager) {}
 
 void GraphicsManager::Init() {
     state_.store(State::DEFAULT, std::memory_order_release);
@@ -183,8 +185,8 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     }
 
     if (currentTask_) {
-        // currentTask_->EndTask();
         spdlog::info("Shutting down task \"{}\"", currentTask_.getName());
+        currentTask_->reset();
         currentTask_->shutdown();
 
         net::message::ProtocolEventMessage event{
@@ -238,6 +240,11 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     spdlog::info("Initializing task \"{}\"", currentTask_.getName());
     currentTask_->init();
 
+    // Set current task as pipeline sink
+    if (auto pipeline_mgr = pipelineManager_.lock()) {
+        pipeline_mgr->ReplaceSink(currentTask_);
+    }
+
     net::message::ProtocolEventMessage event{
         currentProtocol_->protocol_uuid,
         net::message::ProtocolEvent::TASK_START, currentTaskIndex_};
@@ -290,6 +297,17 @@ void GraphicsManager::Run() {
             render->render();
             EndDrawing();
 
+            if (render->getCalibrationPointCount() > 0) {
+                std::vector<reyer::plugin::CalibrationPoint> points(
+                    render->getCalibrationPointCount());
+                render->getCalibrationPoints(points.data());
+
+                auto calibration =
+                    pipelineManager_.lock()->pipeline().getCalibration();
+                calibration->pushCalibrationPoints(points.data(),
+                                                   points.size());
+            }
+
             if (render->isFinished()) {
                 EnqueueCommand(net::message::Command::NEXT);
             }
@@ -301,6 +319,9 @@ void GraphicsManager::Run() {
 
         case State::SAVING: {
             spdlog::info("Saving data");
+            if (auto pipeline_mgr = pipelineManager_.lock()) {
+                pipeline_mgr->RemoveSink();
+            }
             {
                 std::lock_guard<std::mutex> lock(protocolMutex_);
                 currentTaskIndex_ = 0;

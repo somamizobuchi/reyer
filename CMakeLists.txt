@@ -27,5 +27,3 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 if (REYER_BUILD_APPS)
     add_subdirectory(apps)
 endif ()
-
-add_subdirectory(plugins)

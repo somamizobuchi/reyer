@@ -5,6 +5,7 @@
 #include "managers/message_manager.hpp"
 #include "managers/broadcast_manager.hpp"
 #include "managers/pipeline_manager.hpp"
+#include <filesystem>
 #include <memory>
 
 namespace reyer_rt {
@@ -18,6 +19,7 @@ class App {
     ~App();
 
   private:
+    std::filesystem::path executableDir_;
     std::shared_ptr<managers::GraphicsManager> graphicsManager_;
     std::shared_ptr<managers::PluginManager> pluginManager_;
     std::shared_ptr<managers::MessageManager> messageManager_;

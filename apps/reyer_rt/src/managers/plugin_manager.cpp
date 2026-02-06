@@ -58,13 +58,70 @@ PluginManager::GetPlugin(const std::string &name) {
     return it->second; // Returns copy, shares ownership via shared_ptr
 }
 
-std::vector<std::string> PluginManager::GetAvailablePlugins() {
+std::vector<std::string> PluginManager::GetAvailableSources() {
     std::shared_lock lock(plugins_mutex_);
-    std::vector<std::string> plugins;
-    for (auto const &[key, _] : plugins_) {
-        plugins.emplace_back(key);
+    std::vector<std::string> result;
+    for (auto const &[name, plugin] : plugins_) {
+        if (plugin.as<reyer::plugin::IEyeSource>()) {
+            result.emplace_back(name);
+        }
     }
-    return plugins;
+    return result;
+}
+
+std::vector<std::string> PluginManager::GetAvailableStages() {
+    std::shared_lock lock(plugins_mutex_);
+    std::vector<std::string> result;
+    for (auto const &[name, plugin] : plugins_) {
+        if (plugin.as<reyer::plugin::IEyeStage>()) {
+            result.emplace_back(name);
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> PluginManager::GetAvailableSinks() {
+    std::shared_lock lock(plugins_mutex_);
+    std::vector<std::string> result;
+    for (auto const &[name, plugin] : plugins_) {
+        if (plugin.as<reyer::plugin::IEyeSink>()) {
+            result.emplace_back(name);
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> PluginManager::GetAvailableTasks() {
+    std::shared_lock lock(plugins_mutex_);
+    std::vector<std::string> result;
+    for (auto const &[name, plugin] : plugins_) {
+        if (plugin.as<reyer::plugin::IRender>()) {
+            result.emplace_back(name);
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> PluginManager::GetAvailableCalibrations() {
+    std::shared_lock lock(plugins_mutex_);
+    std::vector<std::string> result;
+    for (auto const &[name, plugin] : plugins_) {
+        if (plugin.as<reyer::plugin::ICalibration>()) {
+            result.emplace_back(name);
+        }
+    }
+    return result;
+}
+
+std::vector<std::string> PluginManager::GetAvailableFilters() {
+    std::shared_lock lock(plugins_mutex_);
+    std::vector<std::string> result;
+    for (auto const &[name, plugin] : plugins_) {
+        if (plugin.as<reyer::plugin::IFilter>()) {
+            result.emplace_back(name);
+        }
+    }
+    return result;
 }
 
 const std::vector<std::pair<std::string, std::error_code>> &
@@ -131,6 +188,22 @@ bool PluginManager::IsPluginLibrary_(const std::filesystem::path &file) {
     std::transform(extension.begin(), extension.end(), extension.begin(),
                    [](unsigned char c) { return std::tolower(c); });
     return extension == ".dylib" || extension == ".so";
+}
+
+void PluginManager::InitPlugins() {
+    std::shared_lock lock(plugins_mutex_);
+    for (auto &[name, plugin] : plugins_) {
+        plugin->init();
+        spdlog::info("Initialized plugin: '{}'", name);
+    }
+}
+
+void PluginManager::ShutdownPlugins() {
+    std::shared_lock lock(plugins_mutex_);
+    for (auto &[name, plugin] : plugins_) {
+        plugin->shutdown();
+        spdlog::info("Shutdown plugin: '{}'", name);
+    }
 }
 
 } // namespace reyer_rt::managers

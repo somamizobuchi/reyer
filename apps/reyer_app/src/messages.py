@@ -38,10 +38,15 @@ class ResourceCode(IntEnum):
     """Resource type codes for ResourceRequest."""
     RUNTIME_STATE = 0
     AVAILABLE_MONITORS = 1
-    AVAILABLE_PLUGINS = 2
-    CURRENT_GRAPHICS_SETTINGS = 3
-    CURRENT_PROTOCOL = 4
-    CURRENT_TASK = 5
+    AVAILABLE_SOURCES = 2
+    AVAILABLE_STAGES = 3
+    AVAILABLE_SINKS = 4
+    AVAILABLE_TASKS = 5
+    CURRENT_GRAPHICS_SETTINGS = 6
+    CURRENT_PROTOCOL = 7
+    CURRENT_TASK = 8
+    AVAILABLE_CALIBRATIONS = 9
+    AVAILABLE_FILTERS = 10
 
 class RuntimeState(IntEnum):
     """Runtime state values."""
@@ -131,13 +136,21 @@ class ProtocolRequest(Message):
     notes: str
     tasks: List[TaskInfo]
     protocol_uuid: str = ""
+
+
+class PipelineConfigRequest(Message):
+    """Request to configure the pipeline source and stages."""
+    pipeline_source: str
+    pipeline_calibration: str = ""
+    pipeline_filter: str = ""
+    pipeline_stages: List[str] = []
     
 
 # Type alias for any message variant
 MessageType = (
     Ping | Pong | GraphicsSettingsRequest | ProtocolRequest |
-    Response | ResourceRequest | PluginInfo | MonitorInfo |
-    CommandRequest
+    PipelineConfigRequest | Response | ResourceRequest | PluginInfo |
+    MonitorInfo | CommandRequest
 )
 
 

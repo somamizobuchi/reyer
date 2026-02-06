@@ -80,6 +80,13 @@ struct ProtocolRequest {
     std::string protocol_uuid{};
 };
 
+struct PipelineConfigRequest {
+    std::string pipeline_source{};
+    std::string pipeline_calibration{};
+    std::string pipeline_filter{};
+    std::vector<std::string> pipeline_stages{};
+};
+
 struct Response {
     bool success{};
     int error_code{0};
@@ -90,10 +97,15 @@ struct Response {
 enum class ResourceCode : uint32_t {
     RUNTIME_STATE = 0,
     AVAILABLE_MONITORS,
-    AVAILABLE_PLUGINS,
+    AVAILABLE_SOURCES,
+    AVAILABLE_STAGES,
+    AVAILABLE_SINKS,
+    AVAILABLE_TASKS,
     CURRENT_GRAPHICS_SETTINGS,
     CURRENT_PROTOCOL,
-    CURRENT_TASK
+    CURRENT_TASK,
+    AVAILABLE_CALIBRATIONS,
+    AVAILABLE_FILTERS
 };
 
 struct ResourceRequest {

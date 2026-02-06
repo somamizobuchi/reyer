@@ -1,7 +1,7 @@
 #include "configuration.hpp"
 #include "reyer/core/core.hpp"
-#include "reyer/plugin/loader.hpp"
 #include "reyer/plugin/interfaces.hpp"
+#include "reyer/plugin/loader.hpp"
 #include <ranges>
 #include <raylib.h>
 
@@ -13,7 +13,10 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
     ~SamplePlugin() = default;
 
   protected:
-    virtual void onInit() override {};
+    virtual void onInit() override {
+        rectangle_ = {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, 100,
+                      100};
+    };
     virtual void onPause() override {};
     virtual void onResume() override {};
     virtual void onReset() override {};
@@ -21,14 +24,16 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
 
     virtual void onRender() override {
         DrawFPS(10, 10);
-        DrawRectanglePro(
-            {GetScreenWidth() / 2.0f, GetScreenHeight() / 2.0f, 100, 100},
-            {50, 50}, 0, getConfig().square_color);
+        DrawRectanglePro(rectangle_, {50, 50}, 0, getConfig().square_color);
     }
 
-    virtual void onProcess(std::span<core::EyeData> data) override {
-        auto view = data | std::views::transform(&core::EyeData::left);
+    virtual void onConsume(const core::EyeData &data) override {
+        rectangle_.x = static_cast<float>(data.left.gaze.raw.x);
+        rectangle_.y = static_cast<float>(data.left.gaze.raw.y);
     }
+
+  private:
+    Rectangle rectangle_{};
 };
 }; // namespace reyer::plugin
 

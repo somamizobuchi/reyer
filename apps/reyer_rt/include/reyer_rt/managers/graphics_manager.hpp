@@ -10,6 +10,7 @@
 #include <system_error>
 
 #include "reyer_rt/managers/broadcast_manager.hpp"
+#include "reyer_rt/managers/pipeline_manager.hpp"
 #include "reyer_rt/managers/plugin_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
 #include <reyer/core/queue.hpp>
@@ -23,7 +24,8 @@ class GraphicsManager {
   public:
     explicit GraphicsManager(
         std::shared_ptr<PluginManager> &plugin_manager,
-        std::shared_ptr<BroadcastManager> &broadcast_manager);
+        std::shared_ptr<BroadcastManager> &broadcast_manager,
+        std::shared_ptr<PipelineManager> &pipeline_manager);
 
     void Init();
 
@@ -87,6 +89,7 @@ class GraphicsManager {
 
     std::weak_ptr<managers::PluginManager> pluginManager_;
     std::weak_ptr<managers::BroadcastManager> broadcastManager_;
+    std::weak_ptr<managers::PipelineManager> pipelineManager_;
 
     std::mutex protocolMutex_;
     std::optional<net::message::ProtocolRequest> currentProtocol_;

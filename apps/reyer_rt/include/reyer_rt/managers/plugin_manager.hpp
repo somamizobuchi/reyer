@@ -23,12 +23,20 @@ class PluginManager {
     std::expected<reyer::plugin::Plugin, std::error_code>
     GetPlugin(const std::string &name);
 
-    std::vector<std::string> GetAvailablePlugins();
+    std::vector<std::string> GetAvailableSources();
+    std::vector<std::string> GetAvailableStages();
+    std::vector<std::string> GetAvailableSinks();
+    std::vector<std::string> GetAvailableTasks();
+    std::vector<std::string> GetAvailableCalibrations();
+    std::vector<std::string> GetAvailableFilters();
 
     const std::vector<std::pair<std::string, std::error_code>> &
     GetLoadErrors() const;
 
     std::error_code UnloadPlugin(const std::string &name);
+
+    void InitPlugins();
+    void ShutdownPlugins();
 
   private:
     std::unordered_map<std::string, reyer::plugin::Plugin> plugins_;

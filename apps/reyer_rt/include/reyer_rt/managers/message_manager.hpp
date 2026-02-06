@@ -1,6 +1,7 @@
 #pragma once
 
 #include "reyer_rt/managers/graphics_manager.hpp"
+#include "reyer_rt/managers/pipeline_manager.hpp"
 #include "reyer_rt/managers/plugin_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
 #include "reyer_rt/net/reply_socket.hpp"
@@ -20,12 +21,14 @@ class MessageManager : public threading::Thread<MessageManager> {
     using MessageVariant =
         std::variant<net::message::Ping, net::message::GraphicsSettingsRequest,
                      net::message::ProtocolRequest,
+                     net::message::PipelineConfigRequest,
                      net::message::ResourceRequest,
                      net::message::CommandRequest>;
 
   public:
     explicit MessageManager(std::shared_ptr<GraphicsManager> &graphics_manager,
-                            std::shared_ptr<PluginManager> &plugin_manager);
+                            std::shared_ptr<PluginManager> &plugin_manager,
+                            std::shared_ptr<PipelineManager> &pipeline_manager);
 
     void Init();
     void Shutdown();
@@ -52,6 +55,10 @@ class MessageManager : public threading::Thread<MessageManager> {
     template <typename T>
     std::expected<std::string, std::error_code> SerializePayload(const T &data);
 
+    std::expected<net::message::Response, std::error_code>
+    BuildPluginInfoResponse(const std::vector<std::string> &plugin_names,
+                            std::shared_ptr<PluginManager> &plugin_manager);
+
   private:
     net::ReplySocket rep_;
     std::string send_buffer_;
@@ -59,6 +66,7 @@ class MessageManager : public threading::Thread<MessageManager> {
 
     std::weak_ptr<GraphicsManager> graphics_manager_;
     std::weak_ptr<PluginManager> plugin_manager_;
+    std::weak_ptr<PipelineManager> pipeline_manager_;
 
     struct MessageVisitor {
         MessageManager &manager;
@@ -74,6 +82,9 @@ class MessageManager : public threading::Thread<MessageManager> {
 
         std::expected<net::message::Response, std::error_code>
         operator()(const net::message::ResourceRequest &request);
+
+        std::expected<net::message::Response, std::error_code>
+        operator()(const net::message::PipelineConfigRequest &request);
 
         std::expected<net::message::Response, std::error_code>
         operator()(const net::message::CommandRequest &request);

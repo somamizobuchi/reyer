@@ -64,13 +64,13 @@ class ProtocolBuilderDialog(QDialog):
         else:
             logger.warning("Failed to fetch monitors or no monitors available")
 
-        # Fetch plugins
-        plugins = self.client.get_plugins()
-        if plugins:
-            self.plugins = plugins
-            logger.info(f"Fetched {len(plugins)} plugin(s)")
+        # Fetch tasks (IRender plugins)
+        tasks = self.client.get_tasks()
+        if tasks:
+            self.plugins = tasks
+            logger.info(f"Fetched {len(tasks)} task(s)")
         else:
-            logger.warning("Failed to fetch plugins or no plugins available")
+            logger.warning("Failed to fetch tasks or no tasks available")
 
     def _init_ui(self):
         """Initialize the UI."""

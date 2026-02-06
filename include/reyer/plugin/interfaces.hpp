@@ -1,11 +1,13 @@
 #pragma once
 #include "reyer/core/core.hpp"
+#include "reyer/core/queue.hpp"
+#include "reyer/core/thread.hpp"
 #include "reyer/core/utils.hpp"
 #include <glaze/core/context.hpp>
 #include <glaze/json/read.hpp>
 #include <glaze/json/schema.hpp>
 #include <glaze/util/expected.hpp>
-#include <span>
+#include <mutex>
 #include <string>
 
 #define REYER_DEFINE_INTERFACE_ID(name)                                        \
@@ -72,13 +74,72 @@ class ConfigurableBase : public virtual IConfigurable {
     TConfig config_;
 };
 
+template <typename T> struct ISource {
+    static constexpr InterfaceID iid{};
+    virtual bool waitForData(T &out, std::stop_token stoken) = 0;
+    virtual void cancel() = 0;
+    virtual ~ISource() = default;
+};
+
 template <typename T> struct IStage {
     static constexpr InterfaceID iid{};
-    virtual void process(T *data, size_t length) = 0;
+    virtual void process(T &data) = 0;
     virtual ~IStage() = default;
 };
 
+template <typename T> struct ISink {
+    static constexpr InterfaceID iid{};
+    virtual void consume(const T &data) = 0;
+    virtual ~ISink() = default;
+};
+
+REYER_REGISTER_TYPED_INTERFACE(ISource, core::EyeData, IEyeSource);
 REYER_REGISTER_TYPED_INTERFACE(IStage, core::EyeData, IEyeStage);
+REYER_REGISTER_TYPED_INTERFACE(ISink, core::EyeData, IEyeSink);
+
+enum class Eye : uint8_t {
+    Left = 0,
+    Right,
+};
+struct CalibrationPoint {
+    reyer::vec2<float> control_point;
+    reyer::vec2<float> measured_point;
+    Eye eye;
+};
+
+struct ICalibration {
+    REYER_DEFINE_INTERFACE_ID(ICalibration);
+    virtual void pushCalibrationPoints(const CalibrationPoint *points,
+                                       size_t count) = 0;
+    virtual void calibrate(core::EyeData *data) = 0;
+    virtual ~ICalibration() = default;
+};
+
+struct IFilter {
+    REYER_DEFINE_INTERFACE_ID(IFilter);
+    virtual void filter(core::EyeData *data) = 0;
+    virtual ~IFilter() = default;
+};
+
+class CalibrationBase : public virtual ICalibration {
+  public:
+    void pushCalibrationPoints(const CalibrationPoint *points,
+                               size_t count) override {
+        onCalibrationPointsUpdated(
+            std::span<const CalibrationPoint>(points, count));
+    }
+
+    void calibrate(core::EyeData *data) override { onCalibrate(*data); }
+
+  protected:
+    virtual void onCalibrate(core::EyeData &data) = 0;
+
+    virtual void
+    onCalibrationPointsUpdated(std::span<const CalibrationPoint> points) = 0;
+
+  private:
+    std::vector<CalibrationPoint> calibration_points_;
+};
 
 struct IPlugin : public virtual ILifecycle {
     REYER_DEFINE_INTERFACE_ID(IPlugin);
@@ -100,6 +161,8 @@ struct IRender {
     virtual void render() = 0;
     virtual void setRenderContext(core::RenderContext ctx) = 0;
     virtual bool isFinished() const = 0;
+    virtual size_t getCalibrationPointCount() const = 0;
+    virtual void getCalibrationPoints(CalibrationPoint *out_points) = 0;
     virtual ~IRender() = default;
 };
 
@@ -149,40 +212,146 @@ class PluginBase : public IPlugin, public virtual Interfaces... {
     uint32_t version_{0};
 };
 
-class EyeStageBase : public virtual IEyeStage {
+template <typename T>
+class SourceBase : public virtual ISource<T>,
+                   public core::Thread<SourceBase<T>> {
   public:
-    virtual void process(core::EyeData *data, size_t length) override final {
-        if (data)
-            onProcess(std::span<core::EyeData>(data, length));
+    bool waitForData(T &out, std::stop_token stoken) override final {
+        std::stop_callback cb(stoken, [this] { cancel(); });
+        return output_queue_.wait_and_pop(out, cancel_source_.get_token());
     }
 
+    void cancel() override final { cancel_source_.request_stop(); }
+
+    void startProducing() {
+        cancel_source_ = std::stop_source{};
+        this->Spawn();
+    }
+
+    void stopProducing() { this->Stop(); }
+
+    // Thread<T> CRTP interface
+    void Init() {}
+    void Run() {
+        T sample{};
+        if (onProduce(sample))
+            output_queue_.push(std::move(sample));
+    }
+    void Shutdown() {}
+
   protected:
-    virtual void onProcess(std::span<core::EyeData> data) = 0;
+    virtual bool onProduce(T &out) = 0;
+
+  private:
+    core::Queue<T> output_queue_;
+    std::stop_source cancel_source_;
 };
+
+template <typename T> class StageBase : public virtual IStage<T> {
+  public:
+    void process(T &data) override final { onProcess(data); }
+
+  protected:
+    virtual void onProcess(T &data) = 0;
+};
+
+template <typename T> class SinkBase : public virtual ISink<T> {
+  public:
+    void consume(const T &data) override { onConsume(data); }
+
+  protected:
+    virtual void onConsume(const T &data) = 0;
+};
+
+using EyeSourceBase = SourceBase<core::EyeData>;
+using EyeStageBase = StageBase<core::EyeData>;
+using EyeSinkBase = SinkBase<core::EyeData>;
 
 class RenderBase : public virtual IRender {
   public:
     RenderBase() {};
-    void render() override final { onRender(); }
+    void render() override { onRender(); }
     void setRenderContext(core::RenderContext ctx) override final {
         render_context_ = ctx;
     }
+
+    size_t getCalibrationPointCount() const override {
+        return calibration_points_.size();
+    }
+
+    void getCalibrationPoints(CalibrationPoint *out_points) override {
+        std::copy(calibration_points_.begin(), calibration_points_.end(),
+                  out_points);
+        calibration_points_.clear();
+    }
+
     bool isFinished() const override { return finished_; }
     virtual ~RenderBase() = default;
 
   protected:
     virtual void onRender() = 0;
+
     const core::RenderContext &getRenderContext() const {
         return render_context_;
     };
+
     void endTask() { finished_ = true; }
+
+    void resetFinished() {
+        finished_ = false;
+        calibration_points_.clear();
+    }
+
+    void pushCalibrationPoints(std::vector<CalibrationPoint> points) {
+        calibration_points_ = std::move(points);
+    }
 
   private:
     core::RenderContext render_context_;
     bool finished_ = false;
+    std::vector<CalibrationPoint> calibration_points_;
 };
 
 template <typename Config>
-using RenderPluginBase =
-    PluginBase<RenderBase, ConfigurableBase<Config>, EyeStageBase>;
+class RenderPluginBase
+    : public PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase> {
+  public:
+    RenderPluginBase() {};
+
+    void reset() override final {
+        RenderBase::resetFinished();
+        PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase>::reset();
+    }
+
+    void consume(const core::EyeData &data) override final {
+        std::lock_guard<std::mutex> lock(mutex_);
+        EyeSinkBase::consume(data);
+    }
+
+    void render() override final {
+        std::lock_guard<std::mutex> lock(mutex_);
+        RenderBase::render();
+    }
+
+    virtual ~RenderPluginBase() = default;
+
+  private:
+    std::mutex mutex_;
+};
+
+template <typename Config>
+class SourcePluginBase
+    : public PluginBase<EyeSourceBase, ConfigurableBase<Config>> {
+  public:
+    void init() override {
+        PluginBase<EyeSourceBase, ConfigurableBase<Config>>::init();
+        EyeSourceBase::startProducing();
+    }
+
+    void shutdown() override {
+        EyeSourceBase::stopProducing();
+        PluginBase<EyeSourceBase, ConfigurableBase<Config>>::shutdown();
+    }
+};
+
 } // namespace reyer::plugin

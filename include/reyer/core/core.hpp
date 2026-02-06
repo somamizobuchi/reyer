@@ -13,12 +13,26 @@ struct UserEvent {
 struct DpiData {
     vec2<float> p1;
     vec2<float> p4;
-    vec2<float> gaze;
+    vec2<float> pupil_center;
+    float pupil_diameter;
+};
+
+struct GazeData {
+    vec2<float> raw;
+    vec2<float> filtered;
+    vec2<float> velocity;
+};
+
+struct TrackerData {
+    DpiData dpi;
+    GazeData gaze;
+    bool is_blink;
+    bool is_valid;
 };
 
 struct EyeData {
-    DpiData left;
-    DpiData right;
+    TrackerData left;
+    TrackerData right;
     uint64_t timestamp;
 };
 

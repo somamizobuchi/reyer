@@ -398,8 +398,8 @@ class ReyerMainWindow(QMainWindow):
         self.log("Pipe disconnected from Reyer RT server")
 
     def _initialize_graphics(self):
-        """Show graphics settings dialog and initialize runtime."""
-        from src.graphics_settings_dialog import GraphicsSettingsDialog
+        """Show launcher dialog (graphics + pipeline) and initialize runtime."""
+        from src.launcher_dialog import LauncherDialog
 
         monitors = self.client.get_monitors()
         if not monitors:
@@ -408,15 +408,23 @@ class ReyerMainWindow(QMainWindow):
                 "Please check the connection and try again.")
             return
 
-        dialog = GraphicsSettingsDialog(self.client, monitors, self)
+        sources = self.client.get_sources() or []
+        stages = self.client.get_stages() or []
+        calibrations = self.client.get_calibrations() or []
+        filters = self.client.get_filters() or []
+
+        dialog = LauncherDialog(
+            self.client, monitors, sources, stages,
+            calibrations, filters, self
+        )
         settings = dialog.get_settings()
 
         if settings:
             self.graphics_initialized = True
-            self.log("Graphics initialized successfully")
+            self.log("Runtime initialized successfully")
             self._enable_protocol_controls()
         else:
-            self.log("Graphics initialization cancelled")
+            self.log("Runtime initialization incomplete")
             self.client.disconnect()
 
     def _enable_protocol_controls(self):
@@ -666,21 +674,13 @@ class ReyerMainWindow(QMainWindow):
             self.next_btn.setEnabled(not is_last_task)
 
         elif event == ProtocolEvent.TASK_END:
-            # Task ended - check if protocol finished
-            if task_index >= total_tasks - 1:
-                # Protocol finished - disable all controls
-                self.start_btn.setEnabled(False)
-                self.stop_btn.setEnabled(False)
-                self.next_btn.setEnabled(False)
-                self.previous_btn.setEnabled(False)
-                self.restart_btn.setEnabled(False)
-            else:
-                # Task ended but protocol not finished - back to STANDBY state
-                self.start_btn.setEnabled(True)
-                self.stop_btn.setEnabled(False)
-                self.next_btn.setEnabled(False)
-                self.previous_btn.setEnabled(False)
-                self.restart_btn.setEnabled(False)
+            # Task ended (mid-protocol stop or natural completion)
+            # Protocol is still loaded — enable START for re-run
+            self.start_btn.setEnabled(True)
+            self.stop_btn.setEnabled(False)
+            self.next_btn.setEnabled(False)
+            self.previous_btn.setEnabled(False)
+            self.restart_btn.setEnabled(False)
 
     def closeEvent(self, event):
         """Handle window close event."""

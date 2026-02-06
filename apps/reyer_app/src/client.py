@@ -223,36 +223,59 @@ class ReyerClient:
             logger.error(f"Ping failed: {e}")
             return False
 
-    def get_plugins(self) -> Optional[list]:
-        """
-        Get list of available plugins from server.
-
-        Returns:
-            List of PluginInfo objects, or None if request failed
-        """
+    def _get_plugins_by_type(self, resource_code: int, type_name: str) -> Optional[list]:
+        """Internal helper to get plugins by resource type."""
         try:
-            from .messages import ResourceRequest, ResourceCode, Response, PluginInfo
+            from .messages import ResourceRequest, Response, PluginInfo
 
-            request = ResourceRequest(resource_code=ResourceCode.AVAILABLE_PLUGINS)
+            request = ResourceRequest(resource_code=resource_code)
             response_data = self.send_request(request)
 
             if response_data:
                 response = deserialize_message(response_data, Response)
                 if response.success and response.payload:
-                    # Parse the payload which contains JSON array of PluginInfo
                     plugins = msgspec.json.decode(response.payload, type=List[PluginInfo])
-
-                    logger.info(f"Received {len(plugins)} plugins from server")
+                    logger.info(f"Received {len(plugins)} {type_name} from server")
                     return plugins
                 else:
                     logger.error(f"Server returned error: {response.error_message}")
                     return None
             return None
         except Exception as e:
-            logger.error(f"Failed to get plugins: {e}")
+            logger.error(f"Failed to get {type_name}: {e}")
             import traceback
             traceback.print_exc()
             return None
+
+    def get_sources(self) -> Optional[list]:
+        """Get list of available source plugins (IEyeSource)."""
+        from .messages import ResourceCode
+        return self._get_plugins_by_type(ResourceCode.AVAILABLE_SOURCES, "sources")
+
+    def get_stages(self) -> Optional[list]:
+        """Get list of available stage plugins (IEyeStage)."""
+        from .messages import ResourceCode
+        return self._get_plugins_by_type(ResourceCode.AVAILABLE_STAGES, "stages")
+
+    def get_sinks(self) -> Optional[list]:
+        """Get list of available sink plugins (IEyeSink)."""
+        from .messages import ResourceCode
+        return self._get_plugins_by_type(ResourceCode.AVAILABLE_SINKS, "sinks")
+
+    def get_tasks(self) -> Optional[list]:
+        """Get list of available task plugins (IRender)."""
+        from .messages import ResourceCode
+        return self._get_plugins_by_type(ResourceCode.AVAILABLE_TASKS, "tasks")
+
+    def get_calibrations(self) -> Optional[list]:
+        """Get list of available calibration plugins (ICalibration)."""
+        from .messages import ResourceCode
+        return self._get_plugins_by_type(ResourceCode.AVAILABLE_CALIBRATIONS, "calibrations")
+
+    def get_filters(self) -> Optional[list]:
+        """Get list of available filter plugins (IFilter)."""
+        from .messages import ResourceCode
+        return self._get_plugins_by_type(ResourceCode.AVAILABLE_FILTERS, "filters")
 
     def get_monitors(self) -> Optional[list]:
         """
@@ -284,6 +307,48 @@ class ReyerClient:
             traceback.print_exc()
             return None
 
+
+    def send_pipeline_config(
+        self,
+        source: str,
+        calibration: str = "",
+        filter: str = "",
+        stages: list[str] | None = None,
+    ) -> bool:
+        """
+        Send pipeline configuration to runtime.
+
+        Args:
+            source: Name of the source plugin
+            calibration: Name of the calibration plugin (optional)
+            filter: Name of the filter plugin (optional)
+            stages: List of stage plugin names (optional)
+
+        Returns:
+            True if config was sent and accepted successfully
+        """
+        try:
+            from .messages import PipelineConfigRequest, Response
+
+            request = PipelineConfigRequest(
+                pipeline_source=source,
+                pipeline_calibration=calibration,
+                pipeline_filter=filter,
+                pipeline_stages=stages or []
+            )
+            response_data = self.send_request(request)
+            if response_data:
+                response = deserialize_message(response_data, Response)
+                if response.success:
+                    logger.info("Pipeline config sent successfully")
+                    return True
+                else:
+                    logger.error(f"Server rejected pipeline config: {response.error_message}")
+                    return False
+            return False
+        except Exception as e:
+            logger.error(f"Failed to send pipeline config: {e}")
+            return False
 
     def send_protocol(self, protocol) -> bool:
         """

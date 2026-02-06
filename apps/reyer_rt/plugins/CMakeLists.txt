@@ -1,0 +1,7 @@
+add_subdirectory(sample_plugin)
+add_subdirectory(dummy_source)
+add_subdirectory(dummy_stage)
+add_subdirectory(dummy_sink)
+add_subdirectory(dummy_calibration)
+add_subdirectory(dummy_filter)
+add_subdirectory(simple_calibration)
