@@ -28,8 +28,8 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
     }
 
     virtual void onConsume(const core::EyeData &data) override {
-        rectangle_.x = static_cast<float>(data.left.gaze.raw.x);
-        rectangle_.y = static_cast<float>(data.left.gaze.raw.y);
+        rectangle_.x = static_cast<float>(data.left.dpi.p1.x - data.left.dpi.p4.x);
+        rectangle_.y = static_cast<float>(data.left.dpi.p4.y - data.left.dpi.p1.y);
     }
 
   private:

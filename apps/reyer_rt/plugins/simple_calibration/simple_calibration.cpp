@@ -66,7 +66,8 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         if (current_point_ >= 9) {
             // All points collected — push and finish
             pushCalibrationPoints(std::move(collected_points_));
-            endTask();
+            current_point_ = 0;
+            collected_points_.clear();
             return;
         }
 
@@ -77,6 +78,8 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         // Draw the target point
         DrawCircleV({target.x, target.y}, r, BLACK);
         DrawCircleV({target.x, target.y}, r * 0.3f, WHITE);
+        DrawCircleV(eye_left, 20, RED);
+        DrawCircleV(eye_right, 20, BLUE);
 
         // Draw progress text
         const char *text = TextFormat("Point %d / 9  —  Press N to confirm",
@@ -86,7 +89,7 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         DrawText(text, (GetScreenWidth() - tw) / 2, GetScreenHeight() - 40,
                  font_size, WHITE);
 
-        if (IsKeyPressed(KEY_N)) {
+        if (IsKeyPressed(KEY_N) || IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) {
             // Record averaged measurement for this point
             if (sample_count_ > 0) {
                 float inv = 1.0f / static_cast<float>(sample_count_);
@@ -95,11 +98,15 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
                 vec2<float> mean_right{sample_sum_right_.x * inv,
                                        sample_sum_right_.y * inv};
 
+                spdlog::info("Control point: {}, {}", target.x, target.y);
+                spdlog::info("Measured point: {}, {}", mean_left.x, mean_left.y);
                 collected_points_.push_back(CalibrationPoint{
                     .control_point = target,
                     .measured_point = mean_left,
                     .eye = Eye::Left,
                 });
+                
+
                 collected_points_.push_back(CalibrationPoint{
                     .control_point = target,
                     .measured_point = mean_right,
@@ -116,11 +123,16 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
     }
 
     void onConsume(const core::EyeData &data) override {
-        sample_sum_left_.x += data.left.gaze.raw.x;
-        sample_sum_left_.y += data.left.gaze.raw.y;
-        sample_sum_right_.x += data.right.gaze.raw.x;
-        sample_sum_right_.y += data.right.gaze.raw.y;
+        sample_sum_left_.x += data.left.dpi.p1.x - data.left.dpi.p4.x;
+        sample_sum_left_.y += data.left.dpi.p1.y - data.left.dpi.p4.y;
+        sample_sum_right_.x += data.right.dpi.p1.x - data.right.dpi.p4.x;
+        sample_sum_right_.y += data.right.dpi.p1.y - data.right.dpi.p4.y;
         ++sample_count_;
+
+        eye_left.x = data.left.gaze.raw.x;
+        eye_left.y = data.left.gaze.raw.y;
+        eye_right.x = data.right.gaze.raw.x;
+        eye_right.y = data.right.gaze.raw.y;
     }
 
   private:
@@ -130,6 +142,9 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
     vec2<float> sample_sum_right_{};
     std::vector<vec2<float>> grid_points_;
     std::vector<CalibrationPoint> collected_points_;
+
+    Vector2 eye_left;
+    Vector2 eye_right;
 };
 
 } // namespace reyer::plugin
