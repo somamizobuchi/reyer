@@ -28,4 +28,5 @@ FetchContent_Declare(
     GIT_SHALLOW TRUE
 )
 set(SPDLOG_BUILD_EXAMPLE OFF)
+set(SPDLOG_BUILD_SHARED ON)
 FetchContent_MakeAvailable(spdlog)

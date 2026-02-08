@@ -133,14 +133,15 @@ void GraphicsManager::applyGraphicsSettings_(
         settings.view_distance_mm,
         mw,
         mh,
-        std::atan2(mw, settings.view_distance_mm) * 180.0 / std::numbers::pi /
-            (static_cast<double>(gs.width) / 2.0),
-        std::atan2(mh, settings.view_distance_mm) * 180.0 / std::numbers::pi /
-            (static_cast<double>(gs.width) / 2.0),
+        reyer::core::calculatePPD(GetScreenWidth(), mw, settings.view_distance_mm), // PPD vertical
+        reyer::core::calculatePPD(GetScreenHeight(), mh, settings.view_distance_mm), // PPD horizontal
     };
 
     spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
                  gs.target_fps);
+    spdlog::info("Resolution: {}x{}, Physical size: {}mm x {}mm, View distance: {}mm, PPD: {}x{}",
+                 gs.width, gs.height, mw, mh, settings.view_distance_mm,
+                 renderContext_.ppd_x, renderContext_.ppd_y);
 }
 
 void GraphicsManager::loadProtocol_() {
@@ -252,11 +253,10 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     }
 
     spdlog::info("Initializing task \"{}\"", currentTask_.getName());
-    currentTask_->init();
     if (auto *render = currentTask_.as<reyer::plugin::IRender>()) {
-        render->setRenderContext(
-            reyer::core::RenderContext{graphicsSettings_->view_distance_mm});
+        render->setRenderContext(renderContext_);
     }
+    currentTask_->init();
 
     // Set current task as pipeline sink
     if (auto pipeline_mgr = pipelineManager_.lock()) {

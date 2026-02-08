@@ -30,8 +30,7 @@
             "inherits": [ "default" ],
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "/usr/bin/clang-20",
-                "CMAKE_CXX_COMPILER": "/usr/bin/clang++-20",
-                "CMAKE_CXX_FLAGS": "-stdlib=libc++"
+                "CMAKE_CXX_COMPILER": "/usr/bin/clang++-20"
             }
         }
 

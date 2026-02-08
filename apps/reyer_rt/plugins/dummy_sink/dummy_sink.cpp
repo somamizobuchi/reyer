@@ -24,11 +24,6 @@ class DummySink
 
     void onConsume(const core::EyeData &data) override {
         ++sample_count_;
-        if (getConfig().verbose) {
-            std::printf("Sink sample #%llu, gaze: (%.2f, %.2f)\n",
-                        sample_count_, data.left.gaze.raw.x,
-                        data.left.gaze.raw.y);
-        }
     }
 
   private:

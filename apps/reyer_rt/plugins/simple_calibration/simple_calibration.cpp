@@ -10,8 +10,7 @@ namespace reyer::plugin {
 
 struct SimpleCalibrationConfig {
     float stimulus_size_arcmin = 10.0f;
-    float grid_spacing_degrees =
-        0.1f; // fraction of screen width/height for margin
+    vec2<float> grid_spacing_degrees = {3.0f, 3.0f};
 };
 
 class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
@@ -29,17 +28,26 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
 
         float w = static_cast<float>(GetScreenWidth());
         float h = static_cast<float>(GetScreenHeight());
-        float mx = w * getConfig().margin_ratio;
-        float my = h * getConfig().margin_ratio;
 
         // 3x3 grid positions
-        float xs[3] = {getRenderContext()., w * 0.5f, w - mx};
-        float ys[3] = {my, h * 0.5f, h - my};
+        float xs[3] = {
+            static_cast<float>(w / 2.0f - getConfig().grid_spacing_degrees.x * getRenderContext().ppd_x),
+            static_cast<float>(w / 2.0f),
+            static_cast<float>(w / 2.0f + getConfig().grid_spacing_degrees.x * getRenderContext().ppd_x)
+        };
+        float ys[3] = {
+            static_cast<float>(h / 2.0f - getConfig().grid_spacing_degrees.y * getRenderContext().ppd_y),
+            static_cast<float>(h / 2.0f),
+            static_cast<float>(h / 2.0f + getConfig().grid_spacing_degrees.y * getRenderContext().ppd_y)
+        };
 
         grid_points_.clear();
-        for (int row = 0; row < 3; ++row)
-            for (int col = 0; col < 3; ++col)
+        for (int row = 0; row < 3; ++row) {
+            for (int col = 0; col < 3; ++col) {
                 grid_points_.push_back({xs[col], ys[row]});
+                spdlog::info("Calibration point {}: ({}, {})", row * 3 + col + 1, xs[col], ys[row]);
+            }
+        }
     }
 
     void onPause() override {}
@@ -63,10 +71,11 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         }
 
         auto &target = grid_points_[current_point_];
-        float r = getConfig().point_radius;
+        float r = getConfig().stimulus_size_arcmin / 60.0f *
+                  getRenderContext().ppd_x / 2.0f;
 
         // Draw the target point
-        DrawCircleV({target.x, target.y}, r, RED);
+        DrawCircleV({target.x, target.y}, r, BLACK);
         DrawCircleV({target.x, target.y}, r * 0.3f, WHITE);
 
         // Draw progress text

@@ -1,0 +1,11 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+find_dependency(raylib)
+find_dependency(glaze)
+
+include("${CMAKE_CURRENT_LIST_DIR}/reyerTargets.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/ReyerPlugin.cmake")
+
+check_required_components(reyer)
