@@ -92,23 +92,31 @@ void GraphicsManager::applyGraphicsSettings_(
     const auto &settings = gfx_promise.settings;
     const auto &gs = settings.graphics_settings;
 
-    // Set config flags
+    // Set config flags (fullscreen is toggled after monitor selection)
     int flags = 0;
     if (gs.anti_aliasing)
         flags |= FLAG_MSAA_4X_HINT;
     if (gs.vsync)
         flags |= FLAG_VSYNC_HINT;
-    if (gs.full_screen)
-        flags |= FLAG_FULLSCREEN_MODE;
+
     SetConfigFlags(flags);
     SetTargetFPS(gs.target_fps);
     SetTraceLogCallback(&GraphicsManager::errorCallback_);
 
-    // Create THE window (once for entire lifetime)
-    InitWindow(gs.width, gs.height, "Reyer RT");
+    // Create window on default monitor with small size first
+    InitWindow(640, 480, "Reyer RT");
     SetWindowMonitor(gs.monitor_index);
-    SetWindowFocused();
+    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for monitor change to take effect
     ClearWindowState(FLAG_WINDOW_HIDDEN);
+    SetWindowSize(gs.width, gs.height);
+    if (gs.full_screen && !IsWindowFullscreen()) {
+        ToggleFullscreen();
+    }
+    SetWindowFocused();
+    auto render_width = GetRenderWidth();
+    auto render_height = GetRenderHeight();
+    spdlog::info("Selected monitor {} with resolution {}x{}", gs.monitor_index,
+                 render_width, render_height);
 
     // Store settings for later access
     graphicsSettings_ = settings;
@@ -137,6 +145,7 @@ void GraphicsManager::applyGraphicsSettings_(
         reyer::core::calculatePPD(GetScreenHeight(), mh, settings.view_distance_mm), // PPD horizontal
     };
 
+    spdlog::info("Monitor: {}", GetMonitorName(gs.monitor_index));
     spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
                  gs.target_fps);
     spdlog::info("Resolution: {}x{}, Physical size: {}mm x {}mm, View distance: {}mm, PPD: {}x{}",
