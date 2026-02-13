@@ -20,6 +20,7 @@ struct Pong {
 struct PluginInfo {
     std::string name{};
     std::string configuration_schema{};
+    std::string default_configuration{};
 };
 
 enum class Command : uint8_t {

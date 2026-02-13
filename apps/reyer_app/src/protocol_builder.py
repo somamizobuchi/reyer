@@ -303,7 +303,7 @@ class ProtocolBuilderDialog(QDialog):
 
             logger.info(f"Building protocol with {len(selected_tasks)} tasks")
 
-            for i, ((plugin_name, schema), config) in enumerate(zip(selected_tasks, configurations)):
+            for i, ((plugin_name, schema, _default_config), config) in enumerate(zip(selected_tasks, configurations)):
                 logger.info(f"Adding task {i+1}: {plugin_name}")
                 task_info = TaskInfo(
                     name=plugin_name,

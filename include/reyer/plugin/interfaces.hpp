@@ -41,6 +41,7 @@ struct ILifecycle {
 struct IConfigurable {
     REYER_DEFINE_INTERFACE_ID(IConfigurable)
     virtual const char *getConfigSchema() = 0;
+    virtual const char *getDefaultConfig() = 0;
     virtual void setConfigStr(const char *config_str) = 0;
     virtual ~IConfigurable() = default;
 };
@@ -54,6 +55,14 @@ class ConfigurableBase : public virtual IConfigurable {
             return "{}";
         }
         return schema_buffer_.c_str();
+    }
+
+    const char *getDefaultConfig() override {
+        auto err = glz::write_json<TConfig>(TConfig{}, default_config_buffer_);
+        if (err) {
+            return "{}";
+        }
+        return default_config_buffer_.c_str();
     }
 
     void setConfigStr(const char *config_str) override {
@@ -71,6 +80,7 @@ class ConfigurableBase : public virtual IConfigurable {
 
   private:
     std::string schema_buffer_;
+    std::string default_config_buffer_;
     TConfig config_;
 };
 

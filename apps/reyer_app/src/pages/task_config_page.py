@@ -12,12 +12,12 @@ from ..schema_ui import PluginConfigWidget
 class TaskConfigurationPage(QWidget):
     """Single page for configuring all tasks with list/detail view."""
 
-    def __init__(self, tasks: list[tuple[str, str]], parent=None):
+    def __init__(self, tasks: list[tuple[str, str, str]], parent=None):
         """
         Initialize task configuration page.
 
         Args:
-            tasks: List of tuples (plugin_name, schema)
+            tasks: List of tuples (plugin_name, schema, default_configuration)
             parent: Parent widget
         """
         super().__init__(parent)
@@ -58,7 +58,7 @@ class TaskConfigurationPage(QWidget):
         self.task_list.currentRowChanged.connect(self._on_task_selected)
 
         # Populate task list
-        for i, (plugin_name, schema) in enumerate(self.tasks):
+        for i, (plugin_name, schema, default_config) in enumerate(self.tasks):
             self.task_list.addItem(f"Task {i + 1}: {plugin_name}")
 
         left_layout.addWidget(self.task_list)
@@ -83,10 +83,10 @@ class TaskConfigurationPage(QWidget):
         self.config_stack.addWidget(no_selection)
 
         # Create config widgets for each task
-        for i, (plugin_name, schema) in enumerate(self.tasks):
+        for i, (plugin_name, schema, default_config) in enumerate(self.tasks):
             try:
                 # Create a simplified config widget without buttons
-                widget = PluginConfigWidget(plugin_name, schema)
+                widget = PluginConfigWidget(plugin_name, schema, default_config=default_config)
                 # Remove the apply/reset buttons (they're at indices in the layout)
                 # We'll just use the schema widget directly
                 self.task_widgets[i] = widget

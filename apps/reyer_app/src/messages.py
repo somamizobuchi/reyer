@@ -103,6 +103,7 @@ class PluginInfo(Message):
     """Plugin information message."""
     name: str
     configuration_schema: str
+    default_configuration: str = ""
 
 
 class MonitorInfo(Message):

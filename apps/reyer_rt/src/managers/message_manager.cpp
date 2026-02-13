@@ -154,13 +154,18 @@ MessageManager::BuildPluginInfoResponse(
         auto p = plugin_manager->GetPlugin(name);
         if (p) {
             std::string schema_str = "{}";
+            std::string default_config_str = "{}";
             if (auto *configurable = p->as<reyer::plugin::IConfigurable>()) {
                 auto schema = configurable->getConfigSchema();
                 if (schema) {
                     schema_str = schema;
                 }
+                auto default_config = configurable->getDefaultConfig();
+                if (default_config) {
+                    default_config_str = default_config;
+                }
             }
-            info.emplace_back(std::string(p->getName()), schema_str);
+            info.emplace_back(std::string(p->getName()), schema_str, default_config_str);
         }
     }
 

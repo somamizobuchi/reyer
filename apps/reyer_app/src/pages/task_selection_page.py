@@ -159,12 +159,12 @@ class TaskSelectionPage(QWidget):
                 plugin_name = text
             item.setText(f"Task {i + 1}: {plugin_name}")
 
-    def get_tasks(self) -> list[tuple[str, str]]:
+    def get_tasks(self) -> list[tuple[str, str, str]]:
         """
         Get the list of selected tasks.
 
         Returns:
-            List of tuples (plugin_name, schema)
+            List of tuples (plugin_name, schema, default_configuration)
         """
         import logging
         logger = logging.getLogger(__name__)
@@ -189,7 +189,7 @@ class TaskSelectionPage(QWidget):
             # Get schema from plugin map
             if plugin_name in self._plugin_map:
                 plugin = self._plugin_map[plugin_name]
-                tasks.append((plugin.name, plugin.configuration_schema))
+                tasks.append((plugin.name, plugin.configuration_schema, plugin.default_configuration))
                 logger.info(f"Task {i}: Added to tasks list")
             else:
                 logger.warning(f"Task {i}: Plugin '{plugin_name}' not found in plugin map")

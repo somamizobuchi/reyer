@@ -359,9 +359,10 @@ class SchemaWidget(QWidget):
         Set field values from dictionary.
 
         Args:
-            values: Dictionary of field values
+            values: Dictionary of field values (may be nested)
         """
-        for field_name, value in values.items():
+        flat = self._flatten_values(values)
+        for field_name, value in flat.items():
             if field_name not in self.fields:
                 continue
 
@@ -387,13 +388,25 @@ class SchemaWidget(QWidget):
             elif isinstance(widget, QComboBox):
                 widget.setCurrentText(str(value))
 
+    @staticmethod
+    def _flatten_values(values: dict, prefix: str = "") -> dict:
+        """Flatten nested dicts into dot-notation keys to match field storage."""
+        flat = {}
+        for key, value in values.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if isinstance(value, dict):
+                flat.update(SchemaWidget._flatten_values(value, full_key))
+            else:
+                flat[full_key] = value
+        return flat
+
 
 class PluginConfigWidget(QWidget):
     """Widget for configuring a plugin using its schema."""
 
     config_changed = Signal(dict)
 
-    def __init__(self, plugin_name: str, schema_str: str, parent: Optional[QWidget] = None):
+    def __init__(self, plugin_name: str, schema_str: str, parent: Optional[QWidget] = None, default_config: str = ""):
         """
         Initialize plugin configuration widget.
 
@@ -401,10 +414,12 @@ class PluginConfigWidget(QWidget):
             plugin_name: Name of the plugin
             schema_str: JSON schema string
             parent: Parent widget
+            default_config: JSON string of default configuration values
         """
         super().__init__(parent)
         self.plugin_name = plugin_name
         self.schema_widget = None
+        self.default_config = default_config
 
         logger.info(f"Initializing PluginConfigWidget for {plugin_name}")
 
@@ -416,6 +431,7 @@ class PluginConfigWidget(QWidget):
             self.schema = {}
 
         self._build_ui()
+        self._apply_default_config()
         logger.info(f"PluginConfigWidget built for {plugin_name}")
 
     def _build_ui(self):
@@ -468,6 +484,18 @@ class PluginConfigWidget(QWidget):
             no_config = QLabel("No configuration schema available for this plugin.")
             no_config.setAlignment(Qt.AlignCenter)
             layout.addWidget(no_config)
+
+    def _apply_default_config(self):
+        """Apply default configuration values if available."""
+        if not self.default_config or not self.schema_widget:
+            return
+        try:
+            defaults = json.loads(self.default_config)
+            if isinstance(defaults, dict):
+                self.schema_widget.set_values(defaults)
+                logger.info(f"Applied default configuration for {self.plugin_name}")
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse default config for {self.plugin_name}: {e}")
 
     def _on_apply(self):
         """Handle apply button click."""
