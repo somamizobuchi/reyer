@@ -13,6 +13,8 @@
 #include "reyer_rt/managers/pipeline_manager.hpp"
 #include "reyer_rt/managers/plugin_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
+#include "reyer_rt/stages/eye_data_writer.hpp"
+#include <reyer/core/h5.hpp>
 #include <reyer/core/queue.hpp>
 #include <reyer/graphics/graphics.hpp>
 #include <reyer/plugin/loader.hpp>
@@ -103,6 +105,10 @@ class GraphicsManager {
     reyer::core::Queue<net::message::CommandPromise> commandQueue_;
     reyer::core::Queue<net::message::GraphicsSettingsPromise>
         graphicsSettingsQueue_;
+
+    std::shared_ptr<reyer::h5::File> currentFile_;
+    std::unique_ptr<reyer::h5::Group> currentGroup_;
+    std::unique_ptr<stages::EyeDataWriter> eyeDataWriter_;
 };
 
 } // namespace reyer_rt::managers

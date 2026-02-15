@@ -28,6 +28,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     INTERFACE
     raylib
     glaze::glaze
+    HDF5::HDF5
 )
 
 include(ReyerInstall)

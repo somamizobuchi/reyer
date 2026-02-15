@@ -6,104 +6,76 @@ namespace reyer::plugin {
 
 template <typename T> class Pipeline {
   public:
-    void setSource(IPlugin *plugin, ISource<T> *source) {
-        source_ = {plugin, source};
-    }
+    void setSource(ISource<T> *source) { source_ = source; }
 
-    void addStage(IPlugin *plugin, IStage<T> *stage) {
-        stages_.push_back({plugin, stage});
-    }
+    void addStage(IStage<T> *stage) { stages_.push_back(stage); }
 
-    void setCalibration(IPlugin *plugin, ICalibration *calibration) {
-        calibration_ = {plugin, calibration};
-    }
+    void addSink(ISink<T> *sink) { sinks_.push_back(sink); }
 
-    void setFilter(IPlugin *plugin, IFilter *filter) {
-        filter_ = {plugin, filter};
-    }
-
-    void addSink(IPlugin *plugin, ISink<T> *sink) {
-        sinks_.push_back({plugin, sink});
-    }
-
-    void init() {
-        if (source_.plugin)
-            source_.plugin->init();
-        if (calibration_.plugin)
-            calibration_.plugin->init();
-        if (filter_.plugin)
-            filter_.plugin->init();
-        for (auto &[plugin, _] : stages_)
-            plugin->init();
-        for (auto &[plugin, _] : sinks_)
-            plugin->init();
-        initialized_ = true;
-    }
-
-    void shutdown() {
-        for (auto &[plugin, _] : sinks_)
-            plugin->shutdown();
-        for (auto &[plugin, _] : stages_)
-            plugin->shutdown();
-        if (filter_.plugin)
-            filter_.plugin->shutdown();
-        if (calibration_.plugin)
-            calibration_.plugin->shutdown();
-        if (source_.plugin)
-            source_.plugin->shutdown();
-        initialized_ = false;
-    }
-
-    void processData(T data) {
-        if (calibration_.iface)
-            calibration_.iface->calibrate(&data);
-
-        if (filter_.iface)
-            filter_.iface->filter(&data);
-
-        for (auto &[_, stage] : stages_)
+    virtual void processData(T data) {
+        for (auto *stage : stages_)
             stage->process(data);
 
-        for (auto &[_, sink] : sinks_)
+        for (auto *sink : sinks_)
             sink->consume(data);
     }
 
-    ISource<T> *getSourceInterface() const { return source_.iface; }
-    ICalibration *getCalibration() const { return calibration_.iface; }
-    IFilter *getFilter() const { return filter_.iface; }
+    ISource<T> *getSourceInterface() const { return source_; }
 
-    void clear() {
-        if (source_.iface)
-            source_.iface->cancel();
-        source_ = {};
-        calibration_ = {};
-        filter_ = {};
+    virtual void clear() {
+        if (source_)
+            source_->cancel();
+        source_ = nullptr;
         stages_.clear();
         sinks_.clear();
-        initialized_ = false;
     }
 
     void clearSinks() { sinks_.clear(); }
 
-    bool hasSource() const { return source_.iface != nullptr; }
+    bool hasSource() const { return source_ != nullptr; }
     size_t stageCount() const { return stages_.size(); }
     size_t sinkCount() const { return sinks_.size(); }
-    bool isInitialized() const { return initialized_; }
+
+    virtual ~Pipeline() = default;
 
   private:
-    template <typename I> struct PluginInterface {
-        IPlugin *plugin = nullptr;
-        I *iface = nullptr;
-    };
-
-    PluginInterface<ISource<T>> source_;
-    PluginInterface<ICalibration> calibration_;
-    PluginInterface<IFilter> filter_;
-    std::vector<PluginInterface<IStage<T>>> stages_;
-    std::vector<PluginInterface<ISink<T>>> sinks_;
-    bool initialized_ = false;
+    ISource<T> *source_ = nullptr;
+    std::vector<IStage<T> *> stages_;
+    std::vector<ISink<T> *> sinks_;
 };
 
-using EyePipeline = Pipeline<core::EyeData>;
+class EyeDataPipeline : public Pipeline<core::EyeData> {
+  public:
+    void setCalibration(ICalibration *calibration) {
+        calibration_ = calibration;
+    }
+
+    void setFilter(IFilter *filter) { filter_ = filter; }
+
+    ICalibration *getCalibration() const { return calibration_; }
+    IFilter *getFilter() const { return filter_; }
+
+    void processData(core::EyeData data) override {
+        if (calibration_)
+            calibration_->calibrate(&data);
+
+        if (filter_)
+            filter_->filter(&data);
+
+        Pipeline::processData(data);
+    }
+
+    void clear() override {
+        calibration_ = nullptr;
+        filter_ = nullptr;
+        Pipeline::clear();
+    }
+
+  private:
+    ICalibration *calibration_ = nullptr;
+    IFilter *filter_ = nullptr;
+};
+
+using EyePipeline = EyeDataPipeline;
 
 } // namespace reyer::plugin

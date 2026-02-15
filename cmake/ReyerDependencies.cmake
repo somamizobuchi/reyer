@@ -2,6 +2,8 @@ include(FetchContent)
 
 find_package(raylib REQUIRED)
 
+find_package(HDF5 REQUIRED)
+
 # GLAZE JSON
 FetchContent_Declare(
     glaze

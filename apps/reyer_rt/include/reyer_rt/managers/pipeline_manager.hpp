@@ -18,34 +18,35 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     ~PipelineManager() = default;
 
     void Init() {
-        // No-op: pipeline is configured later via Configure()
+        std::lock_guard<std::mutex> lock(mutex_);
+        initPlugins_();
+        spdlog::info("Pipeline: initialized with {} stage(s)",
+                     pipeline_.stageCount());
     }
 
     void Run() {
-        while (!get_stop_token().stop_requested()) {
-            reyer::plugin::ISource<reyer::core::EyeData> *source = nullptr;
-            {
-                std::lock_guard<std::mutex> lock(mutex_);
-                source = pipeline_.getSourceInterface();
-            }
-            if (!source) {
-                std::this_thread::sleep_for(std::chrono::milliseconds(10));
-                continue;
-            }
-
-            reyer::core::EyeData sample{};
-            if (!source->waitForData(sample, get_stop_token()))
-                continue;
-
+        reyer::plugin::ISource<reyer::core::EyeData> *source = nullptr;
+        {
             std::lock_guard<std::mutex> lock(mutex_);
-            pipeline_.processData(sample);
+            source = pipeline_.getSourceInterface();
         }
+        if (!source) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            return;
+        }
+
+        reyer::core::EyeData sample{};
+        if (!source->waitForData(sample, get_stop_token()))
+            return;
+
+        std::lock_guard<std::mutex> lock(mutex_);
+        pipeline_.processData(sample);
     }
 
     void Shutdown() {
         std::lock_guard<std::mutex> lock(mutex_);
         pipeline_.clearSinks();
-        pipeline_.shutdown();
+        shutdownPlugins_();
         pipeline_.clear();
     }
 
@@ -60,41 +61,43 @@ class PipelineManager : public threading::Thread<PipelineManager> {
                 old_src->cancel();
         }
         std::lock_guard<std::mutex> lock(mutex_);
-        pipeline_.shutdown();
+        shutdownPlugins_();
         pipeline_.clear();
 
-        if (auto *src = source.as<reyer::plugin::IEyeSource>()) {
-            pipeline_.setSource(source.get(), src);
-            spdlog::info("Pipeline: configured source '{}'", source.getName());
+        // Store plugins for lifecycle management
+        source_ = source;
+        calibration_ = calibration;
+        filter_ = filter;
+        stages_ = std::move(stages);
+
+        if (auto *src = source_.as<reyer::plugin::IEyeSource>()) {
+            pipeline_.setSource(src);
+            spdlog::info("Pipeline: configured source '{}'", source_.getName());
         }
 
-        if (calibration) {
-            if (auto *cal = calibration->as<reyer::plugin::ICalibration>()) {
-                pipeline_.setCalibration(calibration->get(), cal);
+        if (calibration_) {
+            if (auto *cal = calibration_->as<reyer::plugin::ICalibration>()) {
+                pipeline_.setCalibration(cal);
                 spdlog::info("Pipeline: configured calibration '{}'",
-                             calibration->getName());
+                             calibration_->getName());
             }
         }
 
-        if (filter) {
-            if (auto *flt = filter->as<reyer::plugin::IFilter>()) {
-                pipeline_.setFilter(filter->get(), flt);
+        if (filter_) {
+            if (auto *flt = filter_->as<reyer::plugin::IFilter>()) {
+                pipeline_.setFilter(flt);
                 spdlog::info("Pipeline: configured filter '{}'",
-                             filter->getName());
+                             filter_->getName());
             }
         }
 
-        for (auto &stage : stages) {
+        for (auto &stage : stages_) {
             if (auto *stg = stage.as<reyer::plugin::IEyeStage>()) {
-                pipeline_.addStage(stage.get(), stg);
+                pipeline_.addStage(stg);
                 spdlog::info("Pipeline: configured stage '{}'",
                              stage.getName());
             }
         }
-
-        pipeline_.init();
-        spdlog::info("Pipeline: initialized with {} stage(s)",
-                     pipeline_.stageCount());
     }
 
     void ReplaceSink(reyer::plugin::Plugin sink) {
@@ -102,9 +105,14 @@ class PipelineManager : public threading::Thread<PipelineManager> {
         pipeline_.clearSinks();
 
         if (auto *snk = sink.as<reyer::plugin::IEyeSink>()) {
-            pipeline_.addSink(sink.get(), snk);
+            pipeline_.addSink(snk);
             spdlog::info("Pipeline: replaced sink with '{}'", sink.getName());
         }
+    }
+
+    void AddSink(reyer::plugin::ISink<reyer::core::EyeData> *sink) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        pipeline_.addSink(sink);
     }
 
     void RemoveSink() {
@@ -116,7 +124,7 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     void ClearPipeline() {
         std::lock_guard<std::mutex> lock(mutex_);
         pipeline_.clearSinks();
-        pipeline_.shutdown();
+        shutdownPlugins_();
         pipeline_.clear();
         spdlog::info("Pipeline: cleared");
     }
@@ -124,7 +132,35 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     reyer::plugin::EyePipeline &pipeline() { return pipeline_; }
 
   private:
+    void initPlugins_() {
+        if (source_)
+            source_->init();
+        if (calibration_)
+            (*calibration_)->init();
+        if (filter_)
+            (*filter_)->init();
+        for (auto &stage : stages_)
+            stage->init();
+    }
+
+    void shutdownPlugins_() {
+        for (auto &stage : stages_)
+            stage->shutdown();
+        if (filter_)
+            (*filter_)->shutdown();
+        if (calibration_)
+            (*calibration_)->shutdown();
+        if (source_)
+            source_->shutdown();
+    }
+
     reyer::plugin::EyePipeline pipeline_;
+
+    reyer::plugin::Plugin source_;
+    std::optional<reyer::plugin::Plugin> calibration_;
+    std::optional<reyer::plugin::Plugin> filter_;
+    std::vector<reyer::plugin::Plugin> stages_;
+
     std::mutex mutex_;
 };
 

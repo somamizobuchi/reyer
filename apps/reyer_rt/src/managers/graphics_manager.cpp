@@ -106,7 +106,8 @@ void GraphicsManager::applyGraphicsSettings_(
     // Create window on default monitor with small size first
     InitWindow(640, 480, "Reyer RT");
     SetWindowMonitor(gs.monitor_index);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // Wait for monitor change to take effect
+    std::this_thread::sleep_for(std::chrono::milliseconds(
+        300)); // Wait for monitor change to take effect
     ClearWindowState(FLAG_WINDOW_HIDDEN);
     SetWindowSize(gs.width, gs.height);
     if (gs.full_screen && !IsWindowFullscreen()) {
@@ -141,14 +142,17 @@ void GraphicsManager::applyGraphicsSettings_(
         settings.view_distance_mm,
         mw,
         mh,
-        reyer::core::calculatePPD(GetScreenWidth(), mw, settings.view_distance_mm), // PPD vertical
-        reyer::core::calculatePPD(GetScreenHeight(), mh, settings.view_distance_mm), // PPD horizontal
+        reyer::core::calculatePPD(GetScreenWidth(), mw,
+                                  settings.view_distance_mm), // PPD vertical
+        reyer::core::calculatePPD(GetScreenHeight(), mh,
+                                  settings.view_distance_mm), // PPD horizontal
     };
 
     spdlog::info("Monitor: {}", GetMonitorName(gs.monitor_index));
     spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
                  gs.target_fps);
-    spdlog::info("Resolution: {}x{}, Physical size: {}mm x {}mm, View distance: {}mm, PPD: {}x{}",
+    spdlog::info("Resolution: {}x{}, Physical size: {}mm x {}mm, View "
+                 "distance: {}mm, PPD: {}x{}",
                  gs.width, gs.height, mw, mh, settings.view_distance_mm,
                  renderContext_.ppd_x, renderContext_.ppd_y);
 }
@@ -171,6 +175,10 @@ void GraphicsManager::loadProtocol_() {
 
     // Just transition to STANDBY
     state_.store(State::STANDBY, std::memory_order_release);
+
+    // Create HDF5 file for protocol
+    auto filename = std::format("/tmp/{}.h5", currentProtocol_->protocol_uuid);
+    currentFile_ = std::make_shared<reyer::h5::File>(filename, H5F_ACC_TRUNC);
 
     // Broadcast PROTOCOL_NEW
     if (auto bcast = broadcastManager_.lock()) {
@@ -209,6 +217,13 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     }
 
     if (currentTask_) {
+        // Stop eye data writer before shutting down the task
+        if (eyeDataWriter_) {
+            eyeDataWriter_->Stop();
+            eyeDataWriter_.reset();
+        }
+        currentGroup_.reset();
+
         spdlog::info("Shutting down task \"{}\"", currentTask_.getName());
         currentTask_->reset();
         currentTask_->shutdown();
@@ -267,9 +282,19 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     }
     currentTask_->init();
 
-    // Set current task as pipeline sink
+    // Set current task as pipeline sink and create HDF5 writer
     if (auto pipeline_mgr = pipelineManager_.lock()) {
         pipeline_mgr->ReplaceSink(currentTask_);
+
+        if (currentFile_) {
+            auto group_name = std::format("task_{:03d}", currentTaskIndex_);
+            currentGroup_ = std::make_unique<reyer::h5::Group>(
+                currentFile_->get(), group_name);
+            eyeDataWriter_ = std::make_unique<stages::EyeDataWriter>(
+                currentGroup_->get());
+            pipeline_mgr->AddSink(eyeDataWriter_.get());
+            eyeDataWriter_->Spawn();
+        }
     }
 
     net::message::ProtocolEventMessage event{
@@ -349,6 +374,12 @@ void GraphicsManager::Run() {
             if (auto pipeline_mgr = pipelineManager_.lock()) {
                 pipeline_mgr->RemoveSink();
             }
+            if (eyeDataWriter_) {
+                eyeDataWriter_->Stop();
+                eyeDataWriter_.reset();
+            }
+            currentGroup_.reset();
+            currentFile_.reset();
             {
                 std::lock_guard<std::mutex> lock(protocolMutex_);
                 currentTaskIndex_ = 0;
@@ -398,6 +429,13 @@ void GraphicsManager::pollCommands_() {
 }
 
 void GraphicsManager::Shutdown() {
+    if (eyeDataWriter_) {
+        eyeDataWriter_->Stop();
+        eyeDataWriter_.reset();
+    }
+    currentGroup_.reset();
+    currentFile_.reset();
+
     // Shut down and release the plugin BEFORE closing the window
     // Plugin may have OpenGL resources that need a valid context to destroy
     if (currentTask_) {
