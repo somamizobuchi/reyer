@@ -9,7 +9,7 @@ struct SimpleFilterConfig {
 };
 
 class SimpleFilter
-    : public PluginBase<IFilter, ConfigurableBase<SimpleFilterConfig>> {
+    : public PluginBase<EyeStageBase, ConfigurableBase<SimpleFilterConfig>> {
   public:
     SimpleFilter() = default;
     ~SimpleFilter() = default;
@@ -21,27 +21,26 @@ class SimpleFilter
     void onReset() override { resetState(); }
     void onShutdown() override {}
 
-  public:
-    void filter(core::EyeData *data) override {
+    void onProcess(core::EyeData &data) override {
         if (!has_prev_) {
-            data->left.gaze.filtered = data->left.gaze.raw;
-            data->right.gaze.filtered = data->right.gaze.raw;
-            data->left.gaze.velocity = {};
-            data->right.gaze.velocity = {};
-            left_ = {data->left.gaze.raw, {}, data->left.gaze.raw};
-            right_ = {data->right.gaze.raw, {}, data->right.gaze.raw};
-            prev_timestamp_ = data->timestamp;
+            data.left.gaze.filtered = data.left.gaze.raw;
+            data.right.gaze.filtered = data.right.gaze.raw;
+            data.left.gaze.velocity = {};
+            data.right.gaze.velocity = {};
+            left_ = {data.left.gaze.raw, {}, data.left.gaze.raw};
+            right_ = {data.right.gaze.raw, {}, data.right.gaze.raw};
+            prev_timestamp_ = data.timestamp;
             has_prev_ = true;
             return;
         }
 
         float a = getConfig().smoothing;
-        float dt = static_cast<float>(data->timestamp - prev_timestamp_);
+        float dt = static_cast<float>(data.timestamp - prev_timestamp_);
 
-        filterEye(a, 0.001, data->left.gaze, left_);
-        filterEye(a, 0.001, data->right.gaze, right_);
+        filterEye(a, 0.001, data.left.gaze, left_);
+        filterEye(a, 0.001, data.right.gaze, right_);
 
-        prev_timestamp_ = data->timestamp;
+        prev_timestamp_ = data.timestamp;
     }
 
   private:

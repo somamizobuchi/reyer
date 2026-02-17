@@ -1,6 +1,7 @@
 build/
 .cache/
 .claude/
+.vscode/
 .DS_Store
 CLAUDE.md
 **/__pycache__/
