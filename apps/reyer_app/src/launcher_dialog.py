@@ -3,8 +3,13 @@
 import logging
 
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QStackedWidget,
-    QPushButton, QLabel, QMessageBox
+    QDialog,
+    QVBoxLayout,
+    QHBoxLayout,
+    QStackedWidget,
+    QPushButton,
+    QLabel,
+    QMessageBox,
 )
 from PySide6.QtCore import Qt
 
@@ -47,14 +52,14 @@ class LauncherDialog(QDialog):
         self.settings_result = None
 
         self._init_ui()
-        self.setWindowTitle("Reyer RT — Launcher")
+        self.setWindowTitle("Runtime Configuration")
         self.setMinimumSize(700, 550)
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
 
         # Title
-        title = QLabel("<h1>Reyer RT — Launcher</h1>")
+        title = QLabel("<h1>Runtime Configuration</h1>")
         title.setTextFormat(Qt.RichText)
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
@@ -131,9 +136,7 @@ class LauncherDialog(QDialog):
         )
         success = self.client.send_graphics_settings(settings)
         if not success:
-            QMessageBox.critical(
-                self, "Error", "Failed to apply graphics settings."
-            )
+            QMessageBox.critical(self, "Error", "Failed to apply graphics settings.")
             return
 
         self.settings_result = settings
