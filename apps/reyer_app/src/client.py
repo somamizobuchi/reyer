@@ -599,9 +599,14 @@ class ReyerClient:
 
             except pynng.Timeout:
                 continue
+            except pynng.Closed:
+                logger.info("Subscription socket closed, stopping loop")
+                break
             except Exception as e:
-                if self._running:
-                    logger.error(f"Error in subscription loop: {e}")
+                if not self._running:
+                    break
+                logger.error(f"Error in subscription loop: {e}")
+                break
 
     def __enter__(self) -> ReyerClient:
         """Context manager entry."""
