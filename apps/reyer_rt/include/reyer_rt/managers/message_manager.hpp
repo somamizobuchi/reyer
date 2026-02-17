@@ -3,6 +3,7 @@
 #include "reyer_rt/managers/graphics_manager.hpp"
 #include "reyer_rt/managers/pipeline_manager.hpp"
 #include "reyer_rt/managers/plugin_manager.hpp"
+#include "reyer_rt/managers/protocol_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
 #include "reyer_rt/net/reply_socket.hpp"
 #include "reyer_rt/threading/thread.hpp"
@@ -28,7 +29,8 @@ class MessageManager : public threading::Thread<MessageManager> {
   public:
     explicit MessageManager(std::shared_ptr<GraphicsManager> &graphics_manager,
                             std::shared_ptr<PluginManager> &plugin_manager,
-                            std::shared_ptr<PipelineManager> &pipeline_manager);
+                            std::shared_ptr<PipelineManager> &pipeline_manager,
+                            std::shared_ptr<ProtocolManager> &protocol_manager);
 
     void Init();
     void Shutdown();
@@ -42,7 +44,6 @@ class MessageManager : public threading::Thread<MessageManager> {
 
     std::error_code SendResponse(net::message::Response &response);
 
-    // Helper methods for unified response pattern
     template <typename T>
     std::expected<std::shared_ptr<T>, std::error_code>
     LockManager(std::weak_ptr<T> &weak_ptr);
@@ -67,6 +68,7 @@ class MessageManager : public threading::Thread<MessageManager> {
     std::weak_ptr<GraphicsManager> graphics_manager_;
     std::weak_ptr<PluginManager> plugin_manager_;
     std::weak_ptr<PipelineManager> pipeline_manager_;
+    std::weak_ptr<ProtocolManager> protocol_manager_;
 
     struct MessageVisitor {
         MessageManager &manager;

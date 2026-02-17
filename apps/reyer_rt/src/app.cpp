@@ -23,9 +23,11 @@ void App::Launch() {
     broadcastManager_ = std::make_shared<managers::BroadcastManager>();
     pipelineManager_ = std::make_shared<managers::PipelineManager>();
     graphicsManager_ = std::make_shared<managers::GraphicsManager>(
-        pluginManager_, broadcastManager_, pipelineManager_);
+        broadcastManager_, pipelineManager_);
+    protocolManager_ = std::make_shared<managers::ProtocolManager>(
+        graphicsManager_, pluginManager_, broadcastManager_, pipelineManager_);
     messageManager_ = std::make_shared<managers::MessageManager>(
-        graphicsManager_, pluginManager_, pipelineManager_);
+        graphicsManager_, pluginManager_, pipelineManager_, protocolManager_);
 
     auto load_errors = pluginManager_->GetLoadErrors();
     if (!load_errors.empty()) {
@@ -39,10 +41,12 @@ void App::Launch() {
     messageManager_->Spawn();
     broadcastManager_->Spawn();
     pipelineManager_->Spawn();
+    protocolManager_->Spawn();
     graphicsManager_->Init();
 
     graphicsManager_->Run();
 
+    protocolManager_->Stop();
     pipelineManager_->Stop();
     broadcastManager_->Stop();
     messageManager_->Stop();

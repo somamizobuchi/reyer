@@ -11,6 +11,7 @@ target_sources(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/graphics_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/plugin_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/message_manager.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/protocol_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/managers/broadcast_manager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/net/detail/socket_base.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/src/net/reply_socket.cpp

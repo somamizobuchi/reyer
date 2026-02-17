@@ -24,10 +24,12 @@ namespace reyer_rt::managers {
 MessageManager::MessageManager(
     std::shared_ptr<GraphicsManager> &graphics_manager,
     std::shared_ptr<PluginManager> &plugin_manager,
-    std::shared_ptr<PipelineManager> &pipeline_manager)
+    std::shared_ptr<PipelineManager> &pipeline_manager,
+    std::shared_ptr<ProtocolManager> &protocol_manager)
     : message_visitor_(*this), graphics_manager_(graphics_manager),
       plugin_manager_(plugin_manager),
-      pipeline_manager_(pipeline_manager) {};
+      pipeline_manager_(pipeline_manager),
+      protocol_manager_(protocol_manager) {};
 
 void MessageManager::Init() {
     std::error_code ec{};
@@ -132,6 +134,9 @@ MessageManager::LockManager(std::weak_ptr<PluginManager> &);
 template std::expected<std::shared_ptr<PipelineManager>, std::error_code>
 MessageManager::LockManager(std::weak_ptr<PipelineManager> &);
 
+template std::expected<std::shared_ptr<ProtocolManager>, std::error_code>
+MessageManager::LockManager(std::weak_ptr<ProtocolManager> &);
+
 template std::expected<std::string, std::error_code>
 MessageManager::SerializePayload(const net::message::Pong &);
 
@@ -235,9 +240,8 @@ MessageManager::MessageVisitor::operator()(
         return std::unexpected(graphics_manager.error());
     }
 
-    // Only allow in DEFAULT state
-    auto state = graphics_manager.value()->GetRuntimeState();
-    if (state != net::message::RuntimeState::DEFAULT) {
+    // Only allow before graphics initialized
+    if (graphics_manager.value()->IsGraphicsInitialized()) {
         return std::unexpected(
             std::make_error_code(std::errc::operation_not_permitted));
     }
@@ -256,15 +260,13 @@ std::expected<net::message::Response, std::error_code>
 MessageManager::MessageVisitor::operator()(
     const net::message::ProtocolRequest &request) {
 
-    // Lock graphics manager
+    // Lock graphics manager to check if initialized
     auto graphics_manager = manager.LockManager(manager.graphics_manager_);
     if (!graphics_manager) {
         return std::unexpected(graphics_manager.error());
     }
 
-    // Check if graphics are initialized
-    auto state = graphics_manager.value()->GetRuntimeState();
-    if (state == net::message::RuntimeState::DEFAULT) {
+    if (!graphics_manager.value()->IsGraphicsInitialized()) {
         return std::unexpected(
             std::make_error_code(std::errc::operation_not_supported));
     }
@@ -291,8 +293,13 @@ MessageManager::MessageVisitor::operator()(
         protocol.tasks.emplace_back(task.name, task.configuration);
     }
 
-    // Set protocol on graphics manager
-    if (!graphics_manager.value()->SetProtocol(protocol)) {
+    // Set protocol on protocol manager
+    auto protocol_manager = manager.LockManager(manager.protocol_manager_);
+    if (!protocol_manager) {
+        return std::unexpected(protocol_manager.error());
+    }
+
+    if (!protocol_manager.value()->SetProtocol(protocol)) {
         return std::unexpected(
             std::make_error_code(std::errc::device_or_resource_busy));
     }
@@ -360,12 +367,12 @@ MessageManager::MessageVisitor::operator()(
 std::expected<net::message::Response, std::error_code>
 MessageManager::MessageVisitor::operator()(
     const net::message::CommandRequest &request) {
-    auto graphics_manager = manager.LockManager(manager.graphics_manager_);
-    if (!graphics_manager) {
-        return std::unexpected(graphics_manager.error());
+    auto protocol_manager = manager.LockManager(manager.protocol_manager_);
+    if (!protocol_manager) {
+        return std::unexpected(protocol_manager.error());
     }
 
-    auto future = graphics_manager.value()->EnqueueCommand(request.command);
+    auto future = protocol_manager.value()->EnqueueCommand(request.command);
     auto ec = future.get();
     if (ec) {
         return std::unexpected(ec);
@@ -392,7 +399,12 @@ MessageManager::MessageVisitor::operator()(
     switch (request.resource_code) {
 
     case net::message::ResourceCode::RUNTIME_STATE: {
-        auto state = graphics_manager.value()->GetRuntimeState();
+        auto protocol_manager =
+            manager.LockManager(manager.protocol_manager_);
+        if (!protocol_manager) {
+            return std::unexpected(protocol_manager.error());
+        }
+        auto state = protocol_manager.value()->GetRuntimeState();
         std::string state_json = std::to_string(static_cast<int>(state));
         return manager.CreateSuccessResponse(state_json);
     }

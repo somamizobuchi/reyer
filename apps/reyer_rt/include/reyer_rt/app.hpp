@@ -5,6 +5,7 @@
 #include "managers/message_manager.hpp"
 #include "managers/broadcast_manager.hpp"
 #include "managers/pipeline_manager.hpp"
+#include "managers/protocol_manager.hpp"
 #include <filesystem>
 #include <memory>
 
@@ -25,6 +26,7 @@ class App {
     std::shared_ptr<managers::MessageManager> messageManager_;
     std::shared_ptr<managers::BroadcastManager> broadcastManager_;
     std::shared_ptr<managers::PipelineManager> pipelineManager_;
+    std::shared_ptr<managers::ProtocolManager> protocolManager_;
 };
 
 } // namespace reyer_rt

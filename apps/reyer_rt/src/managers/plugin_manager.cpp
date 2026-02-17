@@ -113,17 +113,6 @@ std::vector<std::string> PluginManager::GetAvailableCalibrations() {
     return result;
 }
 
-std::vector<std::string> PluginManager::GetAvailableFilters() {
-    std::shared_lock lock(plugins_mutex_);
-    std::vector<std::string> result;
-    for (auto const &[name, plugin] : plugins_) {
-        if (plugin.as<reyer::plugin::IFilter>()) {
-            result.emplace_back(name);
-        }
-    }
-    return result;
-}
-
 const std::vector<std::pair<std::string, std::error_code>> &
 PluginManager::GetLoadErrors() const {
     return load_errors_;
