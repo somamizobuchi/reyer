@@ -8,7 +8,7 @@
 namespace reyer::plugin {
 
 struct SampleConfiguration {
-    Color square_color{};
+    Color square_color{255, 0, 0, 255};
 };
 
 } // namespace reyer::plugin
