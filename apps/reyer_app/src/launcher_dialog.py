@@ -39,7 +39,6 @@ class LauncherDialog(QDialog):
         sources: list[PluginInfo],
         stages: list[PluginInfo],
         calibrations: list[PluginInfo] | None = None,
-        filters: list[PluginInfo] | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -48,7 +47,6 @@ class LauncherDialog(QDialog):
         self.sources = sources
         self.stages = stages
         self.calibrations = calibrations or []
-        self.filters = filters or []
         self.settings_result = None
 
         self._init_ui()
@@ -76,7 +74,7 @@ class LauncherDialog(QDialog):
         self.stacked_widget.addWidget(self.graphics_page)
 
         self.pipeline_page = PipelineConfigPage(
-            self.sources, self.stages, self.calibrations, self.filters
+            self.sources, self.stages, self.calibrations
         )
         self.stacked_widget.addWidget(self.pipeline_page)
 
@@ -150,9 +148,9 @@ class LauncherDialog(QDialog):
             QMessageBox.warning(self, "Validation Error", error_msg)
             return
 
-        source, calibration, filter_, stages = self.pipeline_page.get_data()
+        source, calibration, stages = self.pipeline_page.get_data()
         success = self.client.send_pipeline_config(
-            source, calibration=calibration, filter=filter_, stages=stages
+            source, calibration=calibration, stages=stages
         )
         if not success:
             QMessageBox.critical(

@@ -82,7 +82,6 @@ struct ProtocolRequest {
 struct PipelineConfigRequest {
     std::string pipeline_source{};
     std::string pipeline_calibration{};
-    std::string pipeline_filter{};
     std::vector<std::string> pipeline_stages{};
 };
 
@@ -103,8 +102,7 @@ enum class ResourceCode : uint32_t {
     CURRENT_GRAPHICS_SETTINGS,
     CURRENT_PROTOCOL,
     CURRENT_TASK,
-    AVAILABLE_CALIBRATIONS,
-    AVAILABLE_FILTERS
+    AVAILABLE_CALIBRATIONS
 };
 
 struct ResourceRequest {

@@ -125,12 +125,6 @@ struct ICalibration {
     virtual ~ICalibration() = default;
 };
 
-struct IFilter {
-    REYER_DEFINE_INTERFACE_ID(IFilter);
-    virtual void filter(core::EyeData *data) = 0;
-    virtual ~IFilter() = default;
-};
-
 class CalibrationBase : public virtual ICalibration {
   public:
     void pushCalibrationPoints(const CalibrationPoint *points,

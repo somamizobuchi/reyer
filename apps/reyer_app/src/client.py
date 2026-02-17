@@ -109,14 +109,23 @@ class ReyerClient:
 
     def disconnect(self) -> None:
         """Disconnect from reyer_rt server."""
+        self._running = False
+
+        # Close sub socket first (outside lock) to unblock recv() in subscription loop
+        if self._sub_socket:
+            try:
+                self._sub_socket.close()
+            except Exception:
+                pass
+
+        # Wait for subscription thread to finish (outside lock to avoid deadlock)
+        if self._subscription_thread and self._subscription_thread.is_alive():
+            self._subscription_thread.join(timeout=2.0)
+
         with self._lock:
-            self._running = False
+            self._sub_socket = None
 
-            # Stop subscription thread if running
-            if self._subscription_thread and self._subscription_thread.is_alive():
-                self._subscription_thread.join(timeout=2.0)
-
-            # Close sockets
+            # Close remaining sockets
             if self._request_socket:
                 self._request_socket.close()
                 self._request_socket = None
@@ -125,12 +134,7 @@ class ReyerClient:
                 self._pub_socket.close()
                 self._pub_socket = None
 
-            if self._sub_socket:
-                self._sub_socket.close()
-                self._sub_socket = None
-
             logger.info("Disconnected from reyer_rt server")
-            # Pipe remove callback will be triggered by pynng, which will call _handle_pipe_remove()
 
     def is_connected(self) -> bool:
         """Check if client is connected to server."""
@@ -272,11 +276,6 @@ class ReyerClient:
         from .messages import ResourceCode
         return self._get_plugins_by_type(ResourceCode.AVAILABLE_CALIBRATIONS, "calibrations")
 
-    def get_filters(self) -> Optional[list]:
-        """Get list of available filter plugins (IFilter)."""
-        from .messages import ResourceCode
-        return self._get_plugins_by_type(ResourceCode.AVAILABLE_FILTERS, "filters")
-
     def get_monitors(self) -> Optional[list]:
         """
         Get list of available monitors from server.
@@ -312,7 +311,6 @@ class ReyerClient:
         self,
         source: str,
         calibration: str = "",
-        filter: str = "",
         stages: list[str] | None = None,
     ) -> bool:
         """
@@ -321,7 +319,6 @@ class ReyerClient:
         Args:
             source: Name of the source plugin
             calibration: Name of the calibration plugin (optional)
-            filter: Name of the filter plugin (optional)
             stages: List of stage plugin names (optional)
 
         Returns:
@@ -333,7 +330,6 @@ class ReyerClient:
             request = PipelineConfigRequest(
                 pipeline_source=source,
                 pipeline_calibration=calibration,
-                pipeline_filter=filter,
                 pipeline_stages=stages or []
             )
             response_data = self.send_request(request)

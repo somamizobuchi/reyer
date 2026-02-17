@@ -50,30 +50,22 @@ class EyeDataPipeline : public Pipeline<core::EyeData> {
         calibration_ = calibration;
     }
 
-    void setFilter(IFilter *filter) { filter_ = filter; }
-
     ICalibration *getCalibration() const { return calibration_; }
-    IFilter *getFilter() const { return filter_; }
 
     void processData(core::EyeData data) override {
         if (calibration_)
             calibration_->calibrate(&data);
-
-        if (filter_)
-            filter_->filter(&data);
 
         Pipeline::processData(data);
     }
 
     void clear() override {
         calibration_ = nullptr;
-        filter_ = nullptr;
         Pipeline::clear();
     }
 
   private:
     ICalibration *calibration_ = nullptr;
-    IFilter *filter_ = nullptr;
 };
 
 using EyePipeline = EyeDataPipeline;

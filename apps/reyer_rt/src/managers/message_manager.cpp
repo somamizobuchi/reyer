@@ -338,17 +338,6 @@ MessageManager::MessageVisitor::operator()(
                          request.pipeline_calibration);
     }
 
-    // Resolve filter plugin (optional)
-    std::optional<reyer::plugin::Plugin> filter;
-    if (!request.pipeline_filter.empty()) {
-        auto flt = plugin_manager.value()->GetPlugin(request.pipeline_filter);
-        if (flt)
-            filter = flt.value();
-        else
-            spdlog::warn("Pipeline filter '{}' not found",
-                         request.pipeline_filter);
-    }
-
     // Resolve stage plugins
     std::vector<reyer::plugin::Plugin> stages;
     for (const auto &stage_name : request.pipeline_stages) {
@@ -360,7 +349,7 @@ MessageManager::MessageVisitor::operator()(
     }
 
     pipeline_manager.value()->Configure(source.value(), std::move(calibration),
-                                        std::move(filter), std::move(stages));
+                                        std::move(stages));
     return manager.CreateSuccessResponse();
 }
 
@@ -462,12 +451,6 @@ MessageManager::MessageVisitor::operator()(
     case net::message::ResourceCode::AVAILABLE_CALIBRATIONS: {
         return manager.BuildPluginInfoResponse(
             plugin_manager.value()->GetAvailableCalibrations(),
-            plugin_manager.value());
-    }
-
-    case net::message::ResourceCode::AVAILABLE_FILTERS: {
-        return manager.BuildPluginInfoResponse(
-            plugin_manager.value()->GetAvailableFilters(),
             plugin_manager.value());
     }
 

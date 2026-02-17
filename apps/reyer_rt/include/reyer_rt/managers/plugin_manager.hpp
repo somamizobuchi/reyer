@@ -28,7 +28,6 @@ class PluginManager {
     std::vector<std::string> GetAvailableSinks();
     std::vector<std::string> GetAvailableTasks();
     std::vector<std::string> GetAvailableCalibrations();
-    std::vector<std::string> GetAvailableFilters();
 
     const std::vector<std::pair<std::string, std::error_code>> &
     GetLoadErrors() const;

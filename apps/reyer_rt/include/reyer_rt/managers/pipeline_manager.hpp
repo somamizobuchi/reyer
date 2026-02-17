@@ -59,7 +59,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
 
     void Configure(reyer::plugin::Plugin source,
                    std::optional<reyer::plugin::Plugin> calibration,
-                   std::optional<reyer::plugin::Plugin> filter,
                    std::vector<reyer::plugin::Plugin> stages) {
         // Cancel old source outside lock to wake blocked waitForData
         {
@@ -74,7 +73,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
         // Store plugins for lifecycle management
         source_ = source;
         calibration_ = calibration;
-        filter_ = filter;
         stages_ = std::move(stages);
 
         if (auto *src = source_.as<reyer::plugin::IEyeSource>()) {
@@ -87,14 +85,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
                 pipeline_.setCalibration(cal);
                 spdlog::info("Pipeline: configured calibration '{}'",
                              calibration_->getName());
-            }
-        }
-
-        if (filter_) {
-            if (auto *flt = filter_->as<reyer::plugin::IFilter>()) {
-                pipeline_.setFilter(flt);
-                spdlog::info("Pipeline: configured filter '{}'",
-                             filter_->getName());
             }
         }
 
@@ -146,8 +136,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
             source_->init();
         if (calibration_)
             (*calibration_)->init();
-        if (filter_)
-            (*filter_)->init();
         for (auto &stage : stages_)
             stage->init();
     }
@@ -155,8 +143,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     void shutdownPlugins_() {
         for (auto &stage : stages_)
             stage->shutdown();
-        if (filter_)
-            (*filter_)->shutdown();
         if (calibration_)
             (*calibration_)->shutdown();
         if (source_)
@@ -167,7 +153,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
 
     reyer::plugin::Plugin source_;
     std::optional<reyer::plugin::Plugin> calibration_;
-    std::optional<reyer::plugin::Plugin> filter_;
     std::vector<reyer::plugin::Plugin> stages_;
 
     std::mutex mutex_;
