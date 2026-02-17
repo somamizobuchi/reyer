@@ -176,15 +176,17 @@ void GraphicsManager::loadProtocol_() {
     // Just transition to STANDBY
     state_.store(State::STANDBY, std::memory_order_release);
 
-    // Create HDF5 file for protocol
-    auto filename = std::format("/tmp/{}.h5", currentProtocol_->protocol_uuid);
-    currentFile_ = std::make_shared<reyer::h5::File>(filename, H5F_ACC_TRUNC);
-
-    // Broadcast PROTOCOL_NEW
+    // Broadcast PROTOCOL_LOADED so the frontend knows which protocol is set
     if (auto bcast = broadcastManager_.lock()) {
         net::message::ProtocolEventMessage event{
-            currentProtocol_->protocol_uuid,
-            net::message::ProtocolEvent::PROTOCOL_NEW, 0};
+            .protocol_uuid = {},
+            .event = net::message::ProtocolEvent::PROTOCOL_LOADED,
+            .data = 0,
+            .protocol_name = currentProtocol_->name,
+            .participant_id = currentProtocol_->participant_id,
+            .notes = currentProtocol_->notes,
+            .tasks = currentProtocol_->tasks,
+        };
         bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
     }
 }
@@ -217,7 +219,11 @@ void GraphicsManager::loadTask_(const LoadCommand &command) {
     }
 
     if (currentTask_) {
-        // Stop eye data writer before shutting down the task
+        // Remove sinks from pipeline BEFORE destroying them to avoid
+        // dangling pointer access from the pipeline thread
+        if (auto pipeline_mgr = pipelineManager_.lock()) {
+            pipeline_mgr->RemoveSink();
+        }
         if (eyeDataWriter_) {
             eyeDataWriter_->Stop();
             eyeDataWriter_.reset();
@@ -398,8 +404,43 @@ void GraphicsManager::pollCommands_() {
         auto state = state_.load(std::memory_order_acquire);
         switch (cmd.value().command) {
         case net::message::Command::START:
-            if (state == State::STANDBY)
+            if (state == State::STANDBY) {
+                // Generate a unique UUID for each run
+                {
+                    std::lock_guard<std::mutex> lock(protocolMutex_);
+                    if (currentProtocol_) {
+                        currentProtocol_->protocol_uuid = utils::uuid_v4();
+                        spdlog::info("Generated run UUID: {}",
+                                     currentProtocol_->protocol_uuid);
+                    }
+                }
+
+                // Create HDF5 file for this run
+                if (currentProtocol_) {
+                    auto filename = std::format(
+                        "/tmp/{}.h5", currentProtocol_->protocol_uuid);
+                    currentFile_ = std::make_shared<reyer::h5::File>(
+                        filename, H5F_ACC_TRUNC);
+
+                    // Broadcast PROTOCOL_NEW with full protocol info
+                    if (auto bcast = broadcastManager_.lock()) {
+                        net::message::ProtocolEventMessage event{
+                            .protocol_uuid = currentProtocol_->protocol_uuid,
+                            .event = net::message::ProtocolEvent::PROTOCOL_NEW,
+                            .data = 0,
+                            .protocol_name = currentProtocol_->name,
+                            .participant_id = currentProtocol_->participant_id,
+                            .notes = currentProtocol_->notes,
+                            .tasks = currentProtocol_->tasks,
+                            .file_path = filename,
+                        };
+                        bcast->Broadcast(
+                            net::message::BroadcastTopic::PROTOCOL, event);
+                    }
+                }
+
                 loadTask_(LoadCommand::FIRST);
+            }
             break;
         case net::message::Command::STOP:
             if (state == State::RUNNING)
@@ -408,14 +449,6 @@ void GraphicsManager::pollCommands_() {
         case net::message::Command::NEXT:
             if (state == State::RUNNING)
                 loadTask_(LoadCommand::NEXT);
-            break;
-        case net::message::Command::PREVIOUS:
-            if (currentTaskIndex_ > 0 && state == State::RUNNING)
-                loadTask_(LoadCommand::PREV);
-            break;
-        case net::message::Command::RESTART:
-            if (state == State::RUNNING)
-                loadTask_(LoadCommand::FIRST);
             break;
         case net::message::Command::EXIT:
             if (state == State::RUNNING) {
@@ -429,6 +462,10 @@ void GraphicsManager::pollCommands_() {
 }
 
 void GraphicsManager::Shutdown() {
+    // Remove sinks from pipeline before destroying them
+    if (auto pipeline_mgr = pipelineManager_.lock()) {
+        pipeline_mgr->RemoveSink();
+    }
     if (eyeDataWriter_) {
         eyeDataWriter_->Stop();
         eyeDataWriter_.reset();
@@ -463,10 +500,7 @@ void GraphicsManager::showStandbyScreen_() {
     BeginDrawing();
     ClearBackground({0, 0, 0});
     if (protocol) {
-        auto protocol_text =
-            std::format("Protocol: {}\n"
-                        "ID: {}",
-                        protocol->name, protocol->protocol_uuid);
+        auto protocol_text = std::format("Protocol: {}", protocol->name);
         auto width = MeasureText(protocol_text.c_str(), 24);
         DrawText(protocol_text.c_str(), (GetScreenWidth() - width) / 2.0f,
                  GetScreenHeight() / 2.0f, 24, WHITE);

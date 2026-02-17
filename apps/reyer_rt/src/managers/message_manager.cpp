@@ -291,12 +291,6 @@ MessageManager::MessageVisitor::operator()(
         protocol.tasks.emplace_back(task.name, task.configuration);
     }
 
-    // Generate UUID if not provided by client
-    if (protocol.protocol_uuid.empty()) {
-        protocol.protocol_uuid = utils::uuid_v4();
-        spdlog::debug("Generated protocol UUID: {}", protocol.protocol_uuid);
-    }
-
     // Set protocol on graphics manager
     if (!graphics_manager.value()->SetProtocol(protocol)) {
         return std::unexpected(

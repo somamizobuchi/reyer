@@ -9,8 +9,7 @@ namespace reyer_rt::stages {
 class EyeDataWriter : public reyer::plugin::SinkBase<reyer::core::EyeData>,
                       public threading::Thread<EyeDataWriter> {
   public:
-    explicit EyeDataWriter(hid_t group_id)
-        : dataset_(group_id, "eye_data") {}
+    explicit EyeDataWriter(hid_t group_id) : dataset_(group_id, "eye_data") {}
 
     void Init() {}
 

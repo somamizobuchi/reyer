@@ -1,6 +1,7 @@
 #pragma once
 
 #include "reyer_rt/threading/thread.hpp"
+#include <atomic>
 #include <mutex>
 #include <optional>
 #include <reyer/core/core.hpp>
@@ -25,6 +26,12 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     }
 
     void Run() {
+        if (needs_init_.exchange(false, std::memory_order_acq_rel)) {
+            std::lock_guard<std::mutex> lock(mutex_);
+            initPlugins_();
+            spdlog::info("Pipeline: plugins initialized on pipeline thread");
+        }
+
         reyer::plugin::ISource<reyer::core::EyeData> *source = nullptr;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -98,6 +105,8 @@ class PipelineManager : public threading::Thread<PipelineManager> {
                              stage.getName());
             }
         }
+
+        needs_init_.store(true, std::memory_order_release);
     }
 
     void ReplaceSink(reyer::plugin::Plugin sink) {
@@ -162,6 +171,7 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     std::vector<reyer::plugin::Plugin> stages_;
 
     std::mutex mutex_;
+    std::atomic<bool> needs_init_{false};
 };
 
 } // namespace reyer_rt::managers

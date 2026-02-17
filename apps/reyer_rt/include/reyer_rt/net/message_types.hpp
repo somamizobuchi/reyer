@@ -27,8 +27,6 @@ enum class Command : uint8_t {
     START,
     STOP,
     NEXT,
-    PREVIOUS,
-    RESTART,
     EXIT
 };
 
@@ -131,12 +129,18 @@ enum class ProtocolEvent : uint8_t {
     PROTOCOL_NEW = 1,
     TASK_START = 2,
     TASK_END = 3,
+    PROTOCOL_LOADED = 4,
 };
 
 struct ProtocolEventMessage {
     std::string protocol_uuid;
-    ProtocolEvent event;   
+    ProtocolEvent event;
     uint64_t data;
+    std::string protocol_name{};
+    std::string participant_id{};
+    std::string notes{};
+    std::vector<experiment::Task> tasks{};
+    std::string file_path{};
 };
 
 struct BroadcastMessage {
