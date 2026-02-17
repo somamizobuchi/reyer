@@ -2,7 +2,6 @@
 
 import json
 import logging
-import uuid
 from typing import Optional
 
 from PySide6.QtWidgets import (
@@ -313,17 +312,13 @@ class ProtocolBuilderDialog(QDialog):
         else:
             logger.warning("No task config page found")
 
-        # Generate UUID for this protocol
-        protocol_uuid = str(uuid.uuid4())
-        logger.info(f"Generated protocol UUID: {protocol_uuid}")
-
         # Create protocol WITHOUT graphics settings
+        # UUID is generated server-side (reyer_rt) on each START
         protocol = ProtocolRequest(
             name=basic_info['name'],
             participant_id=basic_info['participant_id'],
             notes=basic_info['notes'],
             tasks=tasks,
-            protocol_uuid=protocol_uuid
         )
 
         logger.info(f"Built protocol: {protocol.name} with {len(tasks)} tasks")

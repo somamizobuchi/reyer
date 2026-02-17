@@ -60,9 +60,7 @@ class Command(IntEnum):
     START = 0
     STOP = 1
     NEXT = 2
-    PREVIOUS = 3
-    RESTART = 4
-    EXIT = 5
+    EXIT = 3
 
 class BroadcastTopic(IntEnum):
     """Broadcast message topic types."""
@@ -75,12 +73,18 @@ class ProtocolEvent(IntEnum):
     PROTOCOL_NEW = 1
     TASK_START = 2
     TASK_END = 3
+    PROTOCOL_LOADED = 4
 
 class ProtocolEventMessage(Message):
     """Protocol event broadcast message."""
     protocol_uuid: str
     event: int  # ProtocolEvent
     data: int
+    protocol_name: str = ""
+    participant_id: str = ""
+    notes: str = ""
+    tasks: List[TaskInfo] = []
+    file_path: str = ""
 
 class BroadcastMessage(Message):
     """Wrapper for broadcast messages with topic routing."""
