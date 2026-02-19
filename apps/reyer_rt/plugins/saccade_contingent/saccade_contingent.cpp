@@ -207,4 +207,4 @@ class SaccadeContingent : public RenderPluginBase<SaccadeContingentConfig> {
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::SaccadeContingent, "Saccade Contingent", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::SaccadeContingent, "Saccade Contingent", "Soma Mizobuchi", "Saccade Contingent", 1)

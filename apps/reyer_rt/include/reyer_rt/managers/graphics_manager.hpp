@@ -91,6 +91,7 @@ class GraphicsManager {
     // Current task being rendered (set by ProtocolManager via queue)
     std::mutex taskMutex_;
     reyer::plugin::Plugin currentTask_;
+    reyer::plugin::Plugin pendingTask_; // waiting to be init'd on gfx thread
     std::atomic<bool> taskFinished_{false};
 
     // Standby screen info

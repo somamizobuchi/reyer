@@ -54,4 +54,4 @@ namespace reyer::plugin::ddpi_ipc_source {
 
 } // namespace reyer::plugin::ddpi_ipc_source
 
-REYER_PLUGIN_ENTRY(reyer::plugin::ddpi_ipc_source::DDPIIPCSource, "DDPI IPC Source", 1);
+REYER_PLUGIN_ENTRY(reyer::plugin::ddpi_ipc_source::DDPIIPCSource, "DDPI IPC Source", "Soma Mizobuchi", "DDPI IPC Source", 1);

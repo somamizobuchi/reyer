@@ -343,17 +343,11 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
         configurable->setConfigStr(task.configuration.c_str());
     }
 
-    // Set render context and init — must happen before handing to graphics
-    auto gfx = graphicsManager_.lock();
-    if (gfx) {
-        auto ctx = gfx->GetRenderContext();
-        if (auto *render = currentTask_.as<reyer::plugin::IRender>()) {
-            render->setRenderContext(ctx);
-        }
+    // Hand the task to GraphicsManager — it will ChangeDirectory, setRenderContext,
+    // and call init() on the graphics thread before rendering starts.
+    if (auto gfx = graphicsManager_.lock()) {
+        gfx->SetCurrentTask(currentTask_);
     }
-
-    spdlog::info("Initializing task \"{}\"", currentTask_.getName());
-    currentTask_->init();
 
     // Set current task as pipeline sink and create HDF5 writer
     if (auto pipeline_mgr = pipelineManager_.lock()) {
@@ -368,11 +362,6 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
             pipeline_mgr->AddSink(eyeDataWriter_.get());
             eyeDataWriter_->Spawn();
         }
-    }
-
-    // Hand the task to GraphicsManager for rendering
-    if (gfx) {
-        gfx->SetCurrentTask(currentTask_);
     }
 
     net::message::ProtocolEventMessage event{

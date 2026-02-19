@@ -68,4 +68,4 @@ class TPSCalibration
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::TPSCalibration, "TPS Calibration", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::TPSCalibration, "TPS Calibration", "Soma Mizobuchi", "TPS Calibration", 1)

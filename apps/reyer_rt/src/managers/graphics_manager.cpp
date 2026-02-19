@@ -154,6 +154,8 @@ void GraphicsManager::Run() {
         }
 
         case State::READY: {
+            pollTaskQueue_();
+
             bool hasTask = false;
             {
                 std::lock_guard<std::mutex> lock(taskMutex_);
@@ -284,14 +286,39 @@ bool GraphicsManager::IsGraphicsInitialized() const {
 
 void GraphicsManager::SetCurrentTask(reyer::plugin::Plugin task) {
     std::lock_guard<std::mutex> lock(taskMutex_);
-    if (!task.getPath().empty()) {
-        if (!ChangeDirectory(task.getPath().parent_path().string().c_str())) {
+    pendingTask_ = task;
+    taskFinished_.store(false, std::memory_order_release);
+}
+
+void GraphicsManager::pollTaskQueue_() {
+    reyer::plugin::Plugin pending;
+    {
+        std::lock_guard<std::mutex> lock(taskMutex_);
+        if (!pendingTask_) {
+            return;
+        }
+        pending = std::move(pendingTask_);
+    }
+
+    if (!pending.getPath().empty()) {
+        if (!ChangeDirectory(pending.getPath().parent_path().string().c_str())) {
             spdlog::warn("Failed to change directory to plugin path: {}",
-                         task.getPath().parent_path().string());
+                         pending.getPath().parent_path().string());
+        } else {
+            spdlog::info("Changed directory to: {}",
+                         pending.getPath().parent_path().string());
         }
     }
-    currentTask_ = task;
-    taskFinished_.store(false, std::memory_order_release);
+
+    if (auto *render = pending.as<reyer::plugin::IRender>()) {
+        render->setRenderContext(renderContext_);
+    }
+
+    spdlog::info("Initializing task \"{}\"", pending.getName());
+    pending->init();
+
+    std::lock_guard<std::mutex> lock(taskMutex_);
+    currentTask_ = std::move(pending);
 }
 
 void GraphicsManager::ClearCurrentTask() {
