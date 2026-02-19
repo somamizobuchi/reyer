@@ -18,7 +18,7 @@ ProtocolManager::ProtocolManager(
       pipelineManager_(pipeline_manager) {}
 
 void ProtocolManager::Init() {
-    state_.store(State::IDLE, std::memory_order_release);
+    state_.store(State::STANDBY, std::memory_order_release);
 }
 
 void ProtocolManager::Run() {
@@ -26,35 +26,16 @@ void ProtocolManager::Run() {
 
     switch (state_.load(std::memory_order_acquire)) {
 
-    case State::IDLE: {
-        bool updated = false;
-        {
-            std::lock_guard<std::mutex> lock(protocolMutex_);
-            updated = protocolUpdated_;
-        }
-        if (updated) {
-            std::lock_guard<std::mutex> lock(protocolMutex_);
-            loadProtocol_();
-        } else {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-        }
-        break;
-    }
-
     case State::STANDBY: {
-        bool updated = false;
         {
             std::lock_guard<std::mutex> lock(protocolMutex_);
-            updated = protocolUpdated_;
+            if (protocolUpdated_)
+                loadProtocol_();
         }
-        if (updated) {
-            std::lock_guard<std::mutex> lock(protocolMutex_);
-            loadProtocol_();
-        }
-        // Check if GraphicsManager reported S key press
-        if (auto gfx = graphicsManager_.lock()) {
-            if (gfx->ConsumeStartRequest()) {
-                EnqueueCommand(net::message::Command::START);
+        if (currentProtocol_) {
+            if (auto gfx = graphicsManager_.lock()) {
+                if (gfx->ConsumeStartRequest())
+                    startProtocol_();
             }
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -158,24 +139,16 @@ ProtocolManager::EnqueueCommand(const net::message::Command &command) {
 }
 
 net::message::RuntimeState ProtocolManager::GetRuntimeState() const {
-    auto current_state = state_.load(std::memory_order_acquire);
-    switch (current_state) {
-    case State::IDLE: {
-        // If graphics are initialized, report STANDBY so client knows it's ready
-        if (auto gfx = graphicsManager_.lock()) {
-            if (gfx->IsGraphicsInitialized()) {
-                return net::message::RuntimeState::STANDBY;
-            }
-        }
-        return net::message::RuntimeState::DEFAULT;
+    if (auto gfx = graphicsManager_.lock()) {
+        if (!gfx->IsGraphicsInitialized())
+            return net::message::RuntimeState::DEFAULT;
     }
+    switch (state_.load(std::memory_order_acquire)) {
     case State::STANDBY:
         return net::message::RuntimeState::STANDBY;
     case State::RUNNING:
     case State::SAVING:
         return net::message::RuntimeState::RUNNING;
-    default:
-        return net::message::RuntimeState::DEFAULT;
     }
 }
 
@@ -183,15 +156,12 @@ void ProtocolManager::loadProtocol_() {
     protocolUpdated_ = false;
 
     if (!currentProtocol_) {
-        state_.store(State::IDLE, std::memory_order_release);
         currentTaskIndex_ = 0;
         if (auto gfx = graphicsManager_.lock()) {
             gfx->ClearStandbyInfo();
         }
         return;
     }
-
-    state_.store(State::STANDBY, std::memory_order_release);
 
     // Tell GraphicsManager to show the protocol name on standby screen
     if (auto gfx = graphicsManager_.lock()) {
@@ -213,46 +183,48 @@ void ProtocolManager::loadProtocol_() {
     }
 }
 
+void ProtocolManager::startProtocol_() {
+    {
+        std::lock_guard<std::mutex> lock(protocolMutex_);
+        if (currentProtocol_) {
+            currentProtocol_->protocol_uuid = utils::uuid_v4();
+            spdlog::info("Generated run UUID: {}",
+                         currentProtocol_->protocol_uuid);
+        }
+    }
+
+    if (!currentProtocol_)
+        return;
+
+    auto filename =
+        std::format("/tmp/{}.h5", currentProtocol_->protocol_uuid);
+    currentFile_ =
+        std::make_shared<reyer::h5::File>(filename, H5F_ACC_TRUNC);
+
+    if (auto bcast = broadcastManager_.lock()) {
+        net::message::ProtocolEventMessage event{
+            .protocol_uuid = currentProtocol_->protocol_uuid,
+            .event = net::message::ProtocolEvent::PROTOCOL_NEW,
+            .data = 0,
+            .protocol_name = currentProtocol_->name,
+            .participant_id = currentProtocol_->participant_id,
+            .notes = currentProtocol_->notes,
+            .tasks = currentProtocol_->tasks,
+            .file_path = filename,
+        };
+        bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
+    }
+
+    loadTask_(LoadCommand::FIRST);
+}
+
 void ProtocolManager::pollCommands_() {
     if (auto cmd = commandQueue_.try_pop()) {
         auto state = state_.load(std::memory_order_acquire);
         switch (cmd.value().command) {
         case net::message::Command::START:
-            if (state == State::STANDBY) {
-                {
-                    std::lock_guard<std::mutex> lock(protocolMutex_);
-                    if (currentProtocol_) {
-                        currentProtocol_->protocol_uuid = utils::uuid_v4();
-                        spdlog::info("Generated run UUID: {}",
-                                     currentProtocol_->protocol_uuid);
-                    }
-                }
-
-                // Create HDF5 file
-                if (currentProtocol_) {
-                    auto filename = std::format(
-                        "/tmp/{}.h5", currentProtocol_->protocol_uuid);
-                    currentFile_ = std::make_shared<reyer::h5::File>(
-                        filename, H5F_ACC_TRUNC);
-
-                    if (auto bcast = broadcastManager_.lock()) {
-                        net::message::ProtocolEventMessage event{
-                            .protocol_uuid = currentProtocol_->protocol_uuid,
-                            .event = net::message::ProtocolEvent::PROTOCOL_NEW,
-                            .data = 0,
-                            .protocol_name = currentProtocol_->name,
-                            .participant_id = currentProtocol_->participant_id,
-                            .notes = currentProtocol_->notes,
-                            .tasks = currentProtocol_->tasks,
-                            .file_path = filename,
-                        };
-                        bcast->Broadcast(
-                            net::message::BroadcastTopic::PROTOCOL, event);
-                    }
-                }
-
-                loadTask_(LoadCommand::FIRST);
-            }
+            if (state == State::STANDBY)
+                startProtocol_();
             break;
         case net::message::Command::STOP:
             if (state == State::RUNNING)

@@ -45,7 +45,6 @@ class ProtocolManager : public threading::Thread<ProtocolManager> {
 
   private:
     enum class State : uint8_t {
-        IDLE,
         STANDBY,
         RUNNING,
         SAVING,
@@ -55,10 +54,11 @@ class ProtocolManager : public threading::Thread<ProtocolManager> {
 
     void pollCommands_();
     void loadProtocol_();
+    void startProtocol_();
     void loadTask_(const LoadCommand &command);
     void cleanupCurrentTask_();
 
-    std::atomic<State> state_{State::IDLE};
+    std::atomic<State> state_{State::STANDBY};
     bool exitRequested_{false};
 
     std::weak_ptr<GraphicsManager> graphicsManager_;

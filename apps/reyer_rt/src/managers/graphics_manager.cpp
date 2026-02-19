@@ -124,9 +124,9 @@ void GraphicsManager::applyGraphicsSettings_(
         settings.view_distance_mm,
         mw,
         mh,
-        reyer::core::calculatePPD(GetScreenWidth(), mw,
+        reyer::core::calculatePPD(GetMonitorWidth(GetCurrentMonitor()), mw,
                                   settings.view_distance_mm),
-        reyer::core::calculatePPD(GetScreenHeight(), mh,
+        reyer::core::calculatePPD(GetMonitorHeight(GetCurrentMonitor()), mh,
                                   settings.view_distance_mm),
     };
 

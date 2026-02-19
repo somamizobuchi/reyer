@@ -121,13 +121,22 @@ class LauncherDialog(QDialog):
                 )
 
     def _on_next(self):
-        """Validate graphics settings, send them, and move to pipeline page."""
+        """Validate graphics settings and move to pipeline page."""
         is_valid, error_msg = self.graphics_page.is_valid()
         if not is_valid:
             QMessageBox.warning(self, "Validation Error", error_msg)
             return
 
-        # Send graphics settings
+        self.stacked_widget.setCurrentIndex(self.PAGE_PIPELINE)
+        self._update_ui()
+
+    def _on_launch(self):
+        """Validate both pages, send graphics then pipeline config, and close."""
+        is_valid, error_msg = self.pipeline_page.is_valid()
+        if not is_valid:
+            QMessageBox.warning(self, "Validation Error", error_msg)
+            return
+
         settings = GraphicsSettingsRequest(
             graphics_settings=self.graphics_page.get_data(),
             view_distance_mm=self.graphics_page.get_view_distance(),
@@ -135,17 +144,6 @@ class LauncherDialog(QDialog):
         success = self.client.send_graphics_settings(settings)
         if not success:
             QMessageBox.critical(self, "Error", "Failed to apply graphics settings.")
-            return
-
-        self.settings_result = settings
-        self.stacked_widget.setCurrentIndex(self.PAGE_PIPELINE)
-        self._update_ui()
-
-    def _on_launch(self):
-        """Validate pipeline config, send it, and close the launcher."""
-        is_valid, error_msg = self.pipeline_page.is_valid()
-        if not is_valid:
-            QMessageBox.warning(self, "Validation Error", error_msg)
             return
 
         source, calibration, stages = self.pipeline_page.get_data()
@@ -158,6 +156,7 @@ class LauncherDialog(QDialog):
             )
             return
 
+        self.settings_result = settings
         self.accept()
 
     def get_settings(self):

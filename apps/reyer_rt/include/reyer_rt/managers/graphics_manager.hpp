@@ -81,7 +81,7 @@ class GraphicsManager {
     std::weak_ptr<PipelineManager> pipelineManager_;
 
     std::optional<net::message::GraphicsSettingsRequest> graphicsSettings_;
-    bool graphicsInitialized_{false};
+    std::atomic<bool> graphicsInitialized_{false};
 
     reyer::core::RenderContext renderContext_;
 
