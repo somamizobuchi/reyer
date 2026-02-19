@@ -73,6 +73,7 @@ class ProtocolEvent(IntEnum):
     TASK_START = 2
     TASK_END = 3
     PROTOCOL_LOADED = 4
+    PROTOCOL_COMPLETE = 5
 
 class ProtocolEventMessage(Message):
     """Protocol event broadcast message."""

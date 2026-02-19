@@ -59,6 +59,7 @@ class ProtocolManager : public threading::Thread<ProtocolManager> {
     void cleanupCurrentTask_();
 
     std::atomic<State> state_{State::IDLE};
+    bool exitRequested_{false};
 
     std::weak_ptr<GraphicsManager> graphicsManager_;
     std::weak_ptr<PluginManager> pluginManager_;

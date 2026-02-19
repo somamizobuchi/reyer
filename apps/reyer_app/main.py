@@ -631,28 +631,26 @@ class ReyerMainWindow(QMainWindow):
             )
 
         elif event_msg.event == ProtocolEvent.TASK_END:
-            # Check if this was the last task
-            if self.current_task_index >= self.total_tasks - 1:
-                self.current_protocol_label.set_text(
-                    self.current_protocol_name or "Unknown", "(Completed)"
-                )
-                self.log(f"Protocol '{self.current_protocol_name}' completed")
-                if self.current_data_file:
-                    self.save_data_btn.setEnabled(True)
-                    self.connection_signals.protocol_completed.emit()
-            else:
-                # Get task name for log
-                task_name = "Unknown"
-                if self.current_protocol and self.current_task_index < len(
-                    self.current_protocol.tasks
-                ):
-                    task_name = self.current_protocol.tasks[
-                        self.current_task_index
-                    ].name
-                self.log(f"Task {self.current_task_index + 1} ended: {task_name}")
+            task_name = "Unknown"
+            if self.current_protocol and self.current_task_index < len(
+                self.current_protocol.tasks
+            ):
+                task_name = self.current_protocol.tasks[
+                    self.current_task_index
+                ].name
+            self.log(f"Task {self.current_task_index + 1} ended: {task_name}")
             self.update_control_buttons(
                 event_msg.event, self.current_task_index, self.total_tasks
             )
+
+        elif event_msg.event == ProtocolEvent.PROTOCOL_COMPLETE:
+            self.current_protocol_label.set_text(
+                self.current_protocol_name or "Unknown", "(Completed)"
+            )
+            self.log(f"Protocol '{self.current_protocol_name}' completed")
+            if self.current_data_file:
+                self.save_data_btn.setEnabled(True)
+                self.connection_signals.protocol_completed.emit()
 
     def update_control_buttons(self, event: int, task_index: int, total_tasks: int):
         """

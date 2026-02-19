@@ -27,8 +27,13 @@ void ProtocolManager::Run() {
     switch (state_.load(std::memory_order_acquire)) {
 
     case State::IDLE: {
-        std::lock_guard<std::mutex> lock(protocolMutex_);
-        if (protocolUpdated_) {
+        bool updated = false;
+        {
+            std::lock_guard<std::mutex> lock(protocolMutex_);
+            updated = protocolUpdated_;
+        }
+        if (updated) {
+            std::lock_guard<std::mutex> lock(protocolMutex_);
             loadProtocol_();
         } else {
             std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -37,11 +42,14 @@ void ProtocolManager::Run() {
     }
 
     case State::STANDBY: {
+        bool updated = false;
         {
             std::lock_guard<std::mutex> lock(protocolMutex_);
-            if (protocolUpdated_) {
-                loadProtocol_();
-            }
+            updated = protocolUpdated_;
+        }
+        if (updated) {
+            std::lock_guard<std::mutex> lock(protocolMutex_);
+            loadProtocol_();
         }
         // Check if GraphicsManager reported S key press
         if (auto gfx = graphicsManager_.lock()) {
@@ -58,6 +66,7 @@ void ProtocolManager::Run() {
         // We check if the task finished via GraphicsManager notification.
         auto gfx = graphicsManager_.lock();
         if (gfx && gfx->IsCurrentTaskFinished()) {
+            gfx->ClearCurrentTask();
             EnqueueCommand(net::message::Command::NEXT);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
@@ -72,11 +81,24 @@ void ProtocolManager::Run() {
             std::lock_guard<std::mutex> lock(protocolMutex_);
             currentTaskIndex_ = 0;
         }
-        state_.store(State::STANDBY, std::memory_order_release);
         spdlog::info("Saving complete");
 
-        if (auto gfx = graphicsManager_.lock()) {
-            gfx->RequestStop();
+        if (auto bcast = broadcastManager_.lock()) {
+            net::message::ProtocolEventMessage event{
+                .protocol_uuid = currentProtocol_ ? currentProtocol_->protocol_uuid : "",
+                .event = net::message::ProtocolEvent::PROTOCOL_COMPLETE,
+                .data = 0,
+            };
+            bcast->Broadcast(net::message::BroadcastTopic::PROTOCOL, event);
+        }
+
+        if (exitRequested_) {
+            exitRequested_ = false;
+            if (auto gfx = graphicsManager_.lock()) {
+                gfx->RequestStop();
+            }
+        } else {
+            state_.store(State::STANDBY, std::memory_order_release);
         }
         break;
     }
@@ -241,6 +263,7 @@ void ProtocolManager::pollCommands_() {
                 loadTask_(LoadCommand::NEXT);
             break;
         case net::message::Command::EXIT:
+            exitRequested_ = true;
             if (state == State::RUNNING) {
                 state_.store(State::SAVING, std::memory_order_release);
             } else {

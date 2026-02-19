@@ -2,6 +2,7 @@
     - [ ] Create aliases for each plugin type
     - [ ] Create scaffolding for each plugin type and allow UI to select plugin for creation
     - [ ] Migrate some plugins to separate repo
+    - [ ] Display version, author, description in UI
 
 - [ ] Need to update hdf5 `Dataset` class to accept length or unlimited (since we'll need to write scalars later)
 - [ ] Add saving of protocol data to hdf5 file
