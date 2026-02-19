@@ -74,6 +74,10 @@ void ProtocolManager::Run() {
         }
         state_.store(State::STANDBY, std::memory_order_release);
         spdlog::info("Saving complete");
+
+        if (auto gfx = graphicsManager_.lock()) {
+            gfx->RequestStop();
+        }
         break;
     }
     }
@@ -239,6 +243,10 @@ void ProtocolManager::pollCommands_() {
         case net::message::Command::EXIT:
             if (state == State::RUNNING) {
                 state_.store(State::SAVING, std::memory_order_release);
+            } else {
+                if (auto gfx = graphicsManager_.lock()) {
+                    gfx->RequestStop();
+                }
             }
             break;
         }

@@ -22,9 +22,7 @@ class DummySink
     void onReset() override { sample_count_ = 0; }
     void onShutdown() override {}
 
-    void onConsume(const core::EyeData &data) override {
-        ++sample_count_;
-    }
+    void onConsume(const core::EyeData &data) override { ++sample_count_; }
 
   private:
     uint64_t sample_count_ = 0;
@@ -32,4 +30,6 @@ class DummySink
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::DummySink, "Dummy Sink", 1)
+REYER_PLUGIN_ENTRY(
+    reyer::plugin::DummySink, "Dummy Sink", "Soma Mizobuchi",
+    "A dummy sink plugin that counts the number of samples consumed.", 1);

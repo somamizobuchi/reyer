@@ -2,9 +2,9 @@
 #include "reyer/core/utils.hpp"
 #include "reyer/plugin/interfaces.hpp"
 #include "reyer/plugin/loader.hpp"
+#include <cmath>
 #include <raylib.h>
 #include <spdlog/spdlog.h>
-#include <cmath>
 
 namespace reyer::plugin {
 
@@ -39,7 +39,8 @@ struct RingBufferStats {
         sum_sq_.x += v.x * v.x;
         sum_sq_.y += v.y * v.y;
         head_ = (head_ + 1) % cap;
-        if (count_ < cap) ++count_;
+        if (count_ < cap)
+            ++count_;
     }
 
     vec2<float> mean() const {
@@ -87,7 +88,8 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         for (int row = 0; row < 3; ++row) {
             for (int col = 0; col < 3; ++col) {
                 grid_points_.push_back({xs[col], ys[row]});
-                spdlog::info("Calibration point {} (deg): ({}, {})", row * 3 + col + 1, xs[col], ys[row]);
+                spdlog::info("Calibration point {} (deg): ({}, {})",
+                             row * 3 + col + 1, xs[col], ys[row]);
             }
         }
     }
@@ -142,24 +144,30 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
         DrawText(text, (GetScreenWidth() - tw) / 2, GetScreenHeight() - 40,
                  font_size, WHITE);
 
-        if (IsKeyPressed(KEY_N) || IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) {
+        if (IsKeyPressed(KEY_N) ||
+            IsGamepadButtonPressed(0, GAMEPAD_BUTTON_RIGHT_TRIGGER_1)) {
             int required = getConfig().num_samples;
             if (static_cast<int>(ring_left_.count()) < required ||
                 static_cast<int>(ring_right_.count()) < required) {
-                spdlog::warn("Not enough samples: left={}, right={}, required={}",
-                             ring_left_.count(), ring_right_.count(), required);
+                spdlog::warn(
+                    "Not enough samples: left={}, right={}, required={}",
+                    ring_left_.count(), ring_right_.count(), required);
             } else if (ring_left_.std_dev() >= getConfig().max_std_dev ||
                        ring_right_.std_dev() >= getConfig().max_std_dev) {
-                spdlog::warn("Std dev too high: left={:.1f}, right={:.1f}, max={:.1f}",
-                             ring_left_.std_dev(), ring_right_.std_dev(),
-                             getConfig().max_std_dev);
+                spdlog::warn(
+                    "Std dev too high: left={:.1f}, right={:.1f}, max={:.1f}",
+                    ring_left_.std_dev(), ring_right_.std_dev(),
+                    getConfig().max_std_dev);
             } else {
                 vec2<float> mean_left = ring_left_.mean();
                 vec2<float> mean_right = ring_right_.mean();
 
-                spdlog::info("Control point (deg): {}, {}", target_deg.x, target_deg.y);
-                spdlog::info("Measured left: {}, {} (std={:.1f})", mean_left.x, mean_left.y, ring_left_.std_dev());
-                spdlog::info("Measured right: {}, {} (std={:.1f})", mean_right.x, mean_right.y, ring_right_.std_dev());
+                spdlog::info("Control point (deg): {}, {}", target_deg.x,
+                             target_deg.y);
+                spdlog::info("Measured left: {}, {} (std={:.1f})", mean_left.x,
+                             mean_left.y, ring_left_.std_dev());
+                spdlog::info("Measured right: {}, {} (std={:.1f})",
+                             mean_right.x, mean_right.y, ring_right_.std_dev());
 
                 collected_points_.push_back(CalibrationPoint{
                     .control_point = target_deg,
@@ -196,10 +204,8 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
     vec2<float> degreesToPixels(vec2<float> deg) const {
         float cx = static_cast<float>(GetScreenWidth()) / 2.0f;
         float cy = static_cast<float>(GetScreenHeight()) / 2.0f;
-        return {
-            cx + deg.x * static_cast<float>(getRenderContext().ppd_x),
-            cy + deg.y * static_cast<float>(getRenderContext().ppd_y)
-        };
+        return {cx + deg.x * static_cast<float>(getRenderContext().ppd_x),
+                cy + deg.y * static_cast<float>(getRenderContext().ppd_y)};
     }
 
   private:
@@ -217,4 +223,5 @@ class SimpleCalibration : public RenderPluginBase<SimpleCalibrationConfig> {
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::SimpleCalibration, "Simple Calibration", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::SimpleCalibration, "Simple Calibration",
+                   "Soma Mizobuchi", "A simple calibration plugin.", 1)

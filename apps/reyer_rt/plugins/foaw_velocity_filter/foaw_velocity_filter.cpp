@@ -12,7 +12,8 @@ struct FoawVelocityFilterConfig {
 };
 
 class FoawVelocityFilter
-    : public PluginBase<EyeStageBase, ConfigurableBase<FoawVelocityFilterConfig>> {
+    : public PluginBase<EyeStageBase,
+                        ConfigurableBase<FoawVelocityFilterConfig>> {
   public:
     FoawVelocityFilter() = default;
 
@@ -65,4 +66,5 @@ class FoawVelocityFilter
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::FoawVelocityFilter, "FOAW Velocity Filter", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::FoawVelocityFilter, "FOAW Velocity filter",
+                   "Soma Mizobuchi", "FOAW Velocity Filter", 1);

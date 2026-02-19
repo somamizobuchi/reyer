@@ -43,4 +43,6 @@ class DummySource : public SourcePluginBase<DummySourceConfig> {
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::DummySource, "Dummy Source", 1)
+REYER_PLUGIN_ENTRY(
+    reyer::plugin::DummySource, "Dummy Source", "Soma Mizobuchi",
+    "A dummy source plugin that generates synthetic eye-tracking data.", 1)

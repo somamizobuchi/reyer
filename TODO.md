@@ -1,4 +1,22 @@
-# Reyer RT todos
+- [ ] Create aliases for each plugin type
+- [ ] Create scaffolding for each plugin type and allow UI to select plugin for creation
+- [ ] Migrate default plugins to separate repo
 
-# Reyer App todos
-
+- [ ] Need to update hdf5 `Dataset` class to accept length or unlimited (since we'll need to write scalars later)
+- [ ] Add saving of protocol data to hdf5 file
+    - protocol
+    - graphics settings
+    - start time
+    - etc.
+- [ ] Add logging to plugins
+    - [ ] Need to install spdlog globally
+    - [ ] Create global mt spdlog sink
+    - [ ] Create nng sink which uses the publisher to send json with topic log
+    - [ ] Add hooks to plugins
+    - [ ] Add tab in reyer_app to view these logs (separate from the app logs or remove app logs?)
+- [ ] Add mechanism for recording events for each plugin
+    - [ ] Add template parameter for an enum class
+    - [ ] Use magic enum library to reflect enum and register as hdf5 type
+    - [ ] expose public protected function (maybe something like `recordEvent`) which will write to hdf5 (std::async?) with timestamp
+        - [ ] For render plugin we can have default enum which will have basic things like TRIAL_START, TRIAL_END, etc.
+    - [ ] Another method for storing other data (templated). has to have type trait defined. maybe `recordCustom(string, value)` with internal `map<string, Dataset<T>`?

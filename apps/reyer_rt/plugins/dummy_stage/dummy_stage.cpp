@@ -32,4 +32,5 @@ class DummyStage
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::DummyStage, "Dummy Stage", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::DummyStage, "Dummy Stage", "Soma Mizobuchi",
+                   "A dummy stage plugin that scales gaze data.", 1)

@@ -15,7 +15,7 @@ namespace reyer_rt::managers {
 
 class PluginManager {
   public:
-    explicit PluginManager(const std::filesystem::path &plugins_dir);
+    explicit PluginManager(std::vector<std::filesystem::path> plugin_dirs);
     ~PluginManager() = default;
 
     std::error_code LoadPlugin(const std::string &path);
@@ -29,9 +29,6 @@ class PluginManager {
     std::vector<std::string> GetAvailableTasks();
     std::vector<std::string> GetAvailableCalibrations();
 
-    const std::vector<std::pair<std::string, std::error_code>> &
-    GetLoadErrors() const;
-
     std::error_code UnloadPlugin(const std::string &name);
 
     void InitPlugins();
@@ -40,7 +37,6 @@ class PluginManager {
   private:
     std::unordered_map<std::string, reyer::plugin::Plugin> plugins_;
     mutable std::shared_mutex plugins_mutex_;
-    std::vector<std::pair<std::string, std::error_code>> load_errors_;
 
     void LoadPluginsFromDirectory_(const std::filesystem::path &dir);
     static bool IsPluginLibrary_(const std::filesystem::path &file);

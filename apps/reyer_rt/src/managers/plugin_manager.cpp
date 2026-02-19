@@ -4,11 +4,14 @@
 #include <filesystem>
 #include <spdlog/spdlog.h>
 #include <system_error>
+#include <vector>
 
 namespace reyer_rt::managers {
 
-PluginManager::PluginManager(const std::filesystem::path &plugins_dir) {
-    LoadPluginsFromDirectory_(plugins_dir);
+PluginManager::PluginManager(std::vector<std::filesystem::path> plugin_dirs) {
+    for (const auto &dir : plugin_dirs) {
+        LoadPluginsFromDirectory_(dir);
+    }
 }
 
 std::error_code PluginManager::LoadPlugin(const std::string &path) {
@@ -22,16 +25,29 @@ std::error_code PluginManager::LoadPlugin(const std::string &path) {
         dlsym(handle, "createPlugin"));
     auto destroyPlugin = reinterpret_cast<reyer::plugin::PluginDestroyFcn *>(
         dlsym(handle, "destroyPlugin"));
-    auto getName = reinterpret_cast<reyer::plugin::PluginNameFcn *>(
+    auto getName        = reinterpret_cast<reyer::plugin::PluginNameFcn *>(
         dlsym(handle, "pluginName"));
+    auto getAuthor      = reinterpret_cast<reyer::plugin::PluginAuthorFcn *>(
+        dlsym(handle, "pluginAuthor"));
+    auto getDescription = reinterpret_cast<reyer::plugin::PluginDescriptionFcn *>(
+        dlsym(handle, "pluginDescription"));
+    auto getVersion     = reinterpret_cast<reyer::plugin::PluginVersionFcn *>(
+        dlsym(handle, "pluginVersion"));
 
     if (!createPlugin || !destroyPlugin || !getName) {
         dlclose(handle);
         return std::make_error_code(std::errc::executable_format_error);
     }
 
+    reyer::plugin::PluginInfo info{
+        .name        = getName(),
+        .author      = getAuthor      ? getAuthor()      : "",
+        .description = getDescription ? getDescription() : "",
+        .version     = getVersion     ? getVersion()     : 0,
+    };
+
     reyer::plugin::Plugin plugin(handle, createPlugin, destroyPlugin,
-                                 getName());
+                                 std::move(info), std::filesystem::path(path));
 
     if (!plugin.get()) {
         return std::make_error_code(std::errc::executable_format_error);
@@ -113,11 +129,6 @@ std::vector<std::string> PluginManager::GetAvailableCalibrations() {
     return result;
 }
 
-const std::vector<std::pair<std::string, std::error_code>> &
-PluginManager::GetLoadErrors() const {
-    return load_errors_;
-}
-
 std::error_code PluginManager::UnloadPlugin(const std::string &name) {
     std::unique_lock lock(plugins_mutex_);
     auto it = plugins_.find(name);
@@ -155,8 +166,6 @@ void PluginManager::LoadPluginsFromDirectory_(
                 if (IsPluginLibrary_(file.path())) {
                     auto load_ec = LoadPlugin(file.path().string());
                     if (load_ec) {
-                        load_errors_.emplace_back(file.path().string(),
-                                                  load_ec);
                         spdlog::warn("Failed to load plugin {}: {}",
                                      file.path().filename().string(),
                                      load_ec.message());

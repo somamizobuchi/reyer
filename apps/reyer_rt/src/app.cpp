@@ -18,8 +18,15 @@ App::App(int argc, char **argv) {
 }
 
 void App::Launch() {
+    std::vector<std::filesystem::path> plugin_dirs = {
+        executableDir_ / "plugins",
+    };
+    if (const char *home = std::getenv("HOME"); home) {
+        plugin_dirs.emplace_back(
+            std::filesystem::path(home) / ".local/share/reyer/plugins");
+    }
     pluginManager_ = std::make_shared<managers::PluginManager>(
-        executableDir_ / "plugins");
+        std::move(plugin_dirs));
     broadcastManager_ = std::make_shared<managers::BroadcastManager>();
     pipelineManager_ = std::make_shared<managers::PipelineManager>();
     graphicsManager_ = std::make_shared<managers::GraphicsManager>(
@@ -28,15 +35,6 @@ void App::Launch() {
         graphicsManager_, pluginManager_, broadcastManager_, pipelineManager_);
     messageManager_ = std::make_shared<managers::MessageManager>(
         graphicsManager_, pluginManager_, pipelineManager_, protocolManager_);
-
-    auto load_errors = pluginManager_->GetLoadErrors();
-    if (!load_errors.empty()) {
-        spdlog::warn("Warning: {} plugin(s) failed to load:",
-                     load_errors.size());
-        for (const auto &[path, ec] : load_errors) {
-            spdlog::warn("  - {}: {}", path, ec.message());
-        }
-    }
 
     messageManager_->Spawn();
     broadcastManager_->Spawn();

@@ -12,6 +12,8 @@ Helper function for building reyer plugins.
         SOURCES <source1> [source2 ...]
         [LINK_LIBRARIES <lib1> [lib2 ...]]
         [OUTPUT_DIRECTORY <dir>]
+        [INSTALL]
+        [RESOURCES <file_or_dir1> [file_or_dir2 ...]]
     )
 
   This function:
@@ -21,6 +23,11 @@ Helper function for building reyer plugins.
     - Links any additional libraries specified via ``LINK_LIBRARIES``
     - Sets the library output directory if ``OUTPUT_DIRECTORY`` is provided
     - Removes the ``lib`` prefix from the output filename
+    - If ``INSTALL`` is specified, generates install() rules that place
+      the plugin and any ``RESOURCES`` into
+      ``$ENV{HOME}/.local/share/reyer/plugins/<name>/``.
+      Each resource entry may be a file or a directory; directories are
+      installed recursively, preserving their name.
 
 #]=======================================================================]
 
@@ -28,9 +35,9 @@ function(reyer_add_plugin NAME)
     cmake_parse_arguments(
         PARSE_ARGV 1
         ARG
-        ""
+        "INSTALL"
         "OUTPUT_DIRECTORY"
-        "SOURCES;LINK_LIBRARIES"
+        "SOURCES;LINK_LIBRARIES;RESOURCES"
     )
 
     if(NOT ARG_SOURCES)
@@ -55,5 +62,29 @@ function(reyer_add_plugin NAME)
         set_target_properties(${NAME} PROPERTIES
             LIBRARY_OUTPUT_DIRECTORY "${ARG_OUTPUT_DIRECTORY}"
         )
+    endif()
+
+    if(ARG_INSTALL)
+        set(_plugin_dest "$ENV{HOME}/.local/share/reyer/plugins/${NAME}")
+
+        install(
+            TARGETS ${NAME}
+            LIBRARY DESTINATION "${_plugin_dest}"
+            RUNTIME DESTINATION "${_plugin_dest}"
+        )
+
+        foreach(_res IN LISTS ARG_RESOURCES)
+            if(IS_DIRECTORY "${_res}")
+                install(
+                    DIRECTORY "${_res}"
+                    DESTINATION "${_plugin_dest}"
+                )
+            else()
+                install(
+                    FILES "${_res}"
+                    DESTINATION "${_plugin_dest}"
+                )
+            endif()
+        endforeach()
     endif()
 endfunction()

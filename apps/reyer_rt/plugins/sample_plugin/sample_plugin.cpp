@@ -28,8 +28,10 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
     }
 
     virtual void onConsume(const core::EyeData &data) override {
-        rectangle_.x = static_cast<float>(data.left.dpi.p1.x - data.left.dpi.p4.x);
-        rectangle_.y = static_cast<float>(data.left.dpi.p4.y - data.left.dpi.p1.y);
+        rectangle_.x =
+            static_cast<float>(data.left.dpi.p1.x - data.left.dpi.p4.x);
+        rectangle_.y =
+            static_cast<float>(data.left.dpi.p4.y - data.left.dpi.p1.y);
     }
 
   private:
@@ -37,4 +39,6 @@ class SamplePlugin : public RenderPluginBase<SampleConfiguration> {
 };
 }; // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::SamplePlugin, "Sample plugin", 10)
+REYER_PLUGIN_ENTRY(
+    reyer::plugin::SamplePlugin, "Sample plugin", "Soma Mizobuchi",
+    "A sample plugin that renders a rectangle based on eye data.", 1);

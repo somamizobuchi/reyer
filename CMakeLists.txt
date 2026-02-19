@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.25)
+cmake_minimum_required(VERSION 4.0)
 
 project(reyer VERSION 0.1.0 LANGUAGES CXX)
 
@@ -33,6 +33,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
 
 include(ReyerInstall)
 
-if (REYER_BUILD_APPS)
+if(REYER_BUILD_APPS)
     add_subdirectory(apps)
-endif ()
+endif()

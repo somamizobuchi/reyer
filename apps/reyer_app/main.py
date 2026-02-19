@@ -24,9 +24,10 @@ from PySide6.QtWidgets import (
     QFrame,
 )
 from PySide6.QtCore import Qt, QTimer, QSize, QObject, Signal
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QAction
 
 from src.client import ReyerClient, ClientConfig
+from src.new_task_dialog import NewTaskDialog
 from src.protocol_builder import ProtocolBuilderDialog
 from src.messages import (
     Command,
@@ -122,6 +123,7 @@ class ReyerMainWindow(QMainWindow):
         """Initialize the user interface."""
         self.setWindowTitle("Reyer Client")
         self.setMinimumSize(900, 500)
+        self._init_menu_bar()
 
         # Central widget and layout
         central_widget = QWidget()
@@ -133,6 +135,28 @@ class ReyerMainWindow(QMainWindow):
 
         # Top toolbar
         toolbar_layout = QHBoxLayout()
+
+        button_size = QSize(54, 54)
+        # Start button (larger with green highlight)
+        self.start_btn = QPushButton()
+        self.start_btn.setIcon(QIcon(str(self.assets_dir / "play.svg")))
+        self.start_btn.setIconSize(QSize(28, 28))
+        self.start_btn.setToolTip("Start")
+        self.start_btn.clicked.connect(self.send_start_command)
+        self.start_btn.setEnabled(False)
+        self.start_btn.setFixedSize(button_size)
+        self.start_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #606060;
+                border: none;
+            }
+            QPushButton:hover { background-color: #45a049; }
+            QPushButton:pressed { background-color: #3d8b40; }
+            QPushButton:disabled { background-color: #ccc; }
+        """
+        )
+        toolbar_layout.addWidget(self.start_btn)
 
         # Control button stylesheet
         control_btn_style = """
@@ -151,28 +175,6 @@ class ReyerMainWindow(QMainWindow):
                 color: #ccc;
             }
         """
-
-        button_size = QSize(54, 54)
-        # Start button (larger with green highlight)
-        self.start_btn = QPushButton()
-        self.start_btn.setIcon(QIcon(str(self.assets_dir / "play.svg")))
-        self.start_btn.setIconSize(QSize(28, 28))
-        self.start_btn.setToolTip("Start")
-        self.start_btn.clicked.connect(self.send_start_command)
-        self.start_btn.setEnabled(False)
-        self.start_btn.setFixedSize(button_size)
-        self.start_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: #4CAF50;
-                border: none;
-            }
-            QPushButton:hover { background-color: #45a049; }
-            QPushButton:pressed { background-color: #3d8b40; }
-            QPushButton:disabled { background-color: #ccc; }
-        """
-        )
-        toolbar_layout.addWidget(self.start_btn)
 
         # Next button
         self.next_btn = QPushButton()
@@ -321,6 +323,26 @@ class ReyerMainWindow(QMainWindow):
         self.status_indicator = QLabel("\u25cf Disconnected")
         self.status_indicator.setStyleSheet("color: red;")
         self.status_bar.addWidget(self.status_indicator)
+
+    def _init_menu_bar(self) -> None:
+        file_menu = self.menuBar().addMenu("&File")
+
+        new_task_action = QAction("&New Task...", self)
+        new_task_action.setShortcut("Ctrl+N")
+        new_task_action.setStatusTip("Scaffold a new render task plugin")
+        new_task_action.triggered.connect(self._open_new_task_dialog)
+        file_menu.addAction(new_task_action)
+
+    def _open_new_task_dialog(self) -> None:
+        plugin_dir = NewTaskDialog.create(self)
+        if plugin_dir is not None:
+            QMessageBox.information(
+                self,
+                "Task created",
+                f"Plugin scaffold created at:\n{plugin_dir}\n\n"
+                f"Add 'add_subdirectory({plugin_dir.name})' to your "
+                f"plugins/CMakeLists.txt to include it in the build.",
+            )
 
     def init_client(self):
         """Initialize the Reyer client."""

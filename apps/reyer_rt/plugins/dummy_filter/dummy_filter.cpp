@@ -42,8 +42,10 @@ class DummyFilter
 
         data.left.gaze.filtered.x = a * prev_left_.x + b * data.left.gaze.raw.x;
         data.left.gaze.filtered.y = a * prev_left_.y + b * data.left.gaze.raw.y;
-        data.right.gaze.filtered.x = a * prev_right_.x + b * data.right.gaze.raw.x;
-        data.right.gaze.filtered.y = a * prev_right_.y + b * data.right.gaze.raw.y;
+        data.right.gaze.filtered.x =
+            a * prev_right_.x + b * data.right.gaze.raw.x;
+        data.right.gaze.filtered.y =
+            a * prev_right_.y + b * data.right.gaze.raw.y;
 
         prev_left_ = data.left.gaze.raw;
         prev_right_ = data.right.gaze.raw;
@@ -57,4 +59,7 @@ class DummyFilter
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::DummyFilter, "Dummy Filter", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::DummyFilter, "Dummy Filter", "Soma Mizobuchi",
+                   "A simple dummy filter plugin that applies exponential "
+                   "smoothing to gaze data.",
+                   1)

@@ -284,6 +284,12 @@ bool GraphicsManager::IsGraphicsInitialized() const {
 
 void GraphicsManager::SetCurrentTask(reyer::plugin::Plugin task) {
     std::lock_guard<std::mutex> lock(taskMutex_);
+    if (!task.getPath().empty()) {
+        if (!ChangeDirectory(task.getPath().parent_path().string().c_str())) {
+            spdlog::warn("Failed to change directory to plugin path: {}",
+                         task.getPath().parent_path().string());
+        }
+    }
     currentTask_ = task;
     taskFinished_.store(false, std::memory_order_release);
 }

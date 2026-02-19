@@ -56,7 +56,7 @@ class SimpleFilter
     }
 
     static void filterEye(float a, float dt, core::GazeData &gaze,
-                           EyeState &state) {
+                          EyeState &state) {
         gaze.filtered = ema(a, gaze.raw, state.filtered_pos);
 
         if (dt > 0.0f) {
@@ -85,4 +85,5 @@ class SimpleFilter
 
 } // namespace reyer::plugin
 
-REYER_PLUGIN_ENTRY(reyer::plugin::SimpleFilter, "Simple Filter", 1)
+REYER_PLUGIN_ENTRY(reyer::plugin::SimpleFilter, "Simple Filter",
+                   "Soma Mizobuchi", "Simple Filter", 1);
