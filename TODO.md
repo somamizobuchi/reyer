@@ -24,4 +24,3 @@
     - [ ] Another method for storing other data (templated). has to have type trait defined. maybe `recordCustom(string, value)` with internal `map<string, Dataset<T>`?
 
 - [ ] App should wait for graphics/plugin manager ready before querying the monitors and plugins
-- [ ] Send graphics and pipeline together to avoid window showing up during runtime configuration
