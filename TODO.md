@@ -1,6 +1,7 @@
-- [ ] Create aliases for each plugin type
-- [ ] Create scaffolding for each plugin type and allow UI to select plugin for creation
-- [ ] Migrate default plugins to separate repo
+- [ ] Plugins updates
+    - [ ] Create aliases for each plugin type
+    - [ ] Create scaffolding for each plugin type and allow UI to select plugin for creation
+    - [ ] Migrate some plugins to separate repo
 
 - [ ] Need to update hdf5 `Dataset` class to accept length or unlimited (since we'll need to write scalars later)
 - [ ] Add saving of protocol data to hdf5 file
@@ -20,3 +21,6 @@
     - [ ] expose public protected function (maybe something like `recordEvent`) which will write to hdf5 (std::async?) with timestamp
         - [ ] For render plugin we can have default enum which will have basic things like TRIAL_START, TRIAL_END, etc.
     - [ ] Another method for storing other data (templated). has to have type trait defined. maybe `recordCustom(string, value)` with internal `map<string, Dataset<T>`?
+
+- [ ] App should wait for graphics/plugin manager ready before querying the monitors and plugins
+- [ ] Send graphics and pipeline together to avoid window showing up during runtime configuration
