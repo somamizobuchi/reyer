@@ -322,6 +322,12 @@ class RenderPluginBase
   public:
     RenderPluginBase() {};
 
+    void init() override {
+        PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase>::init();
+        std::lock_guard<std::mutex> lock(mutex_);
+        initialized_ = true;
+    }
+
     void reset() override final {
         RenderBase::resetFinished();
         PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase>::reset();
@@ -329,6 +335,7 @@ class RenderPluginBase
 
     void consume(const core::EyeData &data) override final {
         std::lock_guard<std::mutex> lock(mutex_);
+        if (!initialized_) return;
         EyeSinkBase::consume(data);
     }
 
@@ -341,6 +348,7 @@ class RenderPluginBase
 
   private:
     std::mutex mutex_;
+    bool initialized_ = false;
 };
 
 template <typename Config>
