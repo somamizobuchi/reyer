@@ -118,17 +118,6 @@ std::vector<std::string> PluginManager::GetAvailableTasks() {
     return result;
 }
 
-std::vector<std::string> PluginManager::GetAvailableCalibrations() {
-    std::shared_lock lock(plugins_mutex_);
-    std::vector<std::string> result;
-    for (auto const &[name, plugin] : plugins_) {
-        if (plugin.as<reyer::plugin::ICalibration>()) {
-            result.emplace_back(name);
-        }
-    }
-    return result;
-}
-
 std::error_code PluginManager::UnloadPlugin(const std::string &name) {
     std::unique_lock lock(plugins_mutex_);
     auto it = plugins_.find(name);

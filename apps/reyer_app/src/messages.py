@@ -45,7 +45,6 @@ class ResourceCode(IntEnum):
     CURRENT_GRAPHICS_SETTINGS = 6
     CURRENT_PROTOCOL = 7
     CURRENT_TASK = 8
-    AVAILABLE_CALIBRATIONS = 9
 
 class RuntimeState(IntEnum):
     """Runtime state values."""
@@ -146,7 +145,6 @@ class ProtocolRequest(Message):
 class PipelineConfigRequest(Message):
     """Request to configure the pipeline source and stages."""
     pipeline_source: str
-    pipeline_calibration: str = ""
     pipeline_stages: List[str] = []
     
 

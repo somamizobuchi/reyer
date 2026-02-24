@@ -327,17 +327,6 @@ MessageManager::MessageVisitor::operator()(
         return manager.CreateErrorResponse(source.error(), "source not found");
     }
 
-    // Resolve calibration plugin (optional)
-    std::optional<reyer::plugin::Plugin> calibration;
-    if (!request.pipeline_calibration.empty()) {
-        auto cal = plugin_manager.value()->GetPlugin(request.pipeline_calibration);
-        if (cal)
-            calibration = cal.value();
-        else
-            spdlog::warn("Pipeline calibration '{}' not found",
-                         request.pipeline_calibration);
-    }
-
     // Resolve stage plugins
     std::vector<reyer::plugin::Plugin> stages;
     for (const auto &stage_name : request.pipeline_stages) {
@@ -348,8 +337,7 @@ MessageManager::MessageVisitor::operator()(
             spdlog::warn("Pipeline stage '{}' not found", stage_name);
     }
 
-    pipeline_manager.value()->Configure(source.value(), std::move(calibration),
-                                        std::move(stages));
+    pipeline_manager.value()->Configure(source.value(), std::move(stages));
     return manager.CreateSuccessResponse();
 }
 
@@ -446,12 +434,6 @@ MessageManager::MessageVisitor::operator()(
             return std::unexpected(payload.error());
         }
         return manager.CreateSuccessResponse(std::move(payload.value()));
-    }
-
-    case net::message::ResourceCode::AVAILABLE_CALIBRATIONS: {
-        return manager.BuildPluginInfoResponse(
-            plugin_manager.value()->GetAvailableCalibrations(),
-            plugin_manager.value());
     }
 
     case net::message::ResourceCode::CURRENT_PROTOCOL: {

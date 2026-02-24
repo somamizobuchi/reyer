@@ -38,7 +38,6 @@ class LauncherDialog(QDialog):
         monitors: list[MonitorInfo],
         sources: list[PluginInfo],
         stages: list[PluginInfo],
-        calibrations: list[PluginInfo] | None = None,
         parent=None,
     ):
         super().__init__(parent)
@@ -46,7 +45,6 @@ class LauncherDialog(QDialog):
         self.monitors = monitors
         self.sources = sources
         self.stages = stages
-        self.calibrations = calibrations or []
         self.settings_result = None
 
         self._init_ui()
@@ -74,7 +72,7 @@ class LauncherDialog(QDialog):
         self.stacked_widget.addWidget(self.graphics_page)
 
         self.pipeline_page = PipelineConfigPage(
-            self.sources, self.stages, self.calibrations
+            self.sources, self.stages
         )
         self.stacked_widget.addWidget(self.pipeline_page)
 
@@ -146,10 +144,8 @@ class LauncherDialog(QDialog):
             QMessageBox.critical(self, "Error", "Failed to apply graphics settings.")
             return
 
-        source, calibration, stages = self.pipeline_page.get_data()
-        success = self.client.send_pipeline_config(
-            source, calibration=calibration, stages=stages
-        )
+        source, stages = self.pipeline_page.get_data()
+        success = self.client.send_pipeline_config(source, stages=stages)
         if not success:
             QMessageBox.critical(
                 self, "Error", "Failed to apply pipeline configuration."

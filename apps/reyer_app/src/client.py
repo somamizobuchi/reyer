@@ -271,11 +271,6 @@ class ReyerClient:
         from .messages import ResourceCode
         return self._get_plugins_by_type(ResourceCode.AVAILABLE_TASKS, "tasks")
 
-    def get_calibrations(self) -> Optional[list]:
-        """Get list of available calibration plugins (ICalibration)."""
-        from .messages import ResourceCode
-        return self._get_plugins_by_type(ResourceCode.AVAILABLE_CALIBRATIONS, "calibrations")
-
     def get_monitors(self) -> Optional[list]:
         """
         Get list of available monitors from server.
@@ -310,7 +305,6 @@ class ReyerClient:
     def send_pipeline_config(
         self,
         source: str,
-        calibration: str = "",
         stages: list[str] | None = None,
     ) -> bool:
         """
@@ -318,7 +312,6 @@ class ReyerClient:
 
         Args:
             source: Name of the source plugin
-            calibration: Name of the calibration plugin (optional)
             stages: List of stage plugin names (optional)
 
         Returns:
@@ -329,7 +322,6 @@ class ReyerClient:
 
             request = PipelineConfigRequest(
                 pipeline_source=source,
-                pipeline_calibration=calibration,
                 pipeline_stages=stages or []
             )
             response_data = self.send_request(request)

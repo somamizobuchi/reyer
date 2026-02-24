@@ -1,5 +1,6 @@
 #pragma once
 #include "reyer/plugin/interfaces.hpp"
+#include <memory>
 #include <vector>
 
 namespace reyer::plugin {
@@ -46,11 +47,11 @@ template <typename T> class Pipeline {
 
 class EyeDataPipeline : public Pipeline<core::EyeData> {
   public:
-    void setCalibration(ICalibration *calibration) {
-        calibration_ = calibration;
+    void setCalibration(std::shared_ptr<ICalibration> calibration) {
+        calibration_ = std::move(calibration);
     }
 
-    ICalibration *getCalibration() const { return calibration_; }
+    ICalibration *getCalibration() const { return calibration_.get(); }
 
     void processData(core::EyeData data) override {
         if (calibration_)
@@ -60,12 +61,12 @@ class EyeDataPipeline : public Pipeline<core::EyeData> {
     }
 
     void clear() override {
-        calibration_ = nullptr;
+        calibration_.reset();
         Pipeline::clear();
     }
 
   private:
-    ICalibration *calibration_ = nullptr;
+    std::shared_ptr<ICalibration> calibration_;
 };
 
 using EyePipeline = EyeDataPipeline;

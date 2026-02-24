@@ -423,10 +423,9 @@ class ReyerMainWindow(QMainWindow):
 
         sources = self.client.get_sources() or []
         stages = self.client.get_stages() or []
-        calibrations = self.client.get_calibrations() or []
 
         dialog = LauncherDialog(
-            self.client, monitors, sources, stages, calibrations, self
+            self.client, monitors, sources, stages, self
         )
         settings = dialog.get_settings()
 

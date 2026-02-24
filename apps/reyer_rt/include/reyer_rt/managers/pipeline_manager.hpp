@@ -2,8 +2,8 @@
 
 #include "reyer_rt/threading/thread.hpp"
 #include <atomic>
+#include <memory>
 #include <mutex>
-#include <optional>
 #include <reyer/core/core.hpp>
 #include <reyer/plugin/loader.hpp>
 #include <reyer/plugin/pipeline.hpp>
@@ -58,7 +58,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     }
 
     void Configure(reyer::plugin::Plugin source,
-                   std::optional<reyer::plugin::Plugin> calibration,
                    std::vector<reyer::plugin::Plugin> stages) {
         // Cancel old source outside lock to wake blocked waitForData
         {
@@ -70,22 +69,12 @@ class PipelineManager : public threading::Thread<PipelineManager> {
         shutdownPlugins_();
         pipeline_.clear();
 
-        // Store plugins for lifecycle management
         source_ = source;
-        calibration_ = calibration;
         stages_ = std::move(stages);
 
         if (auto *src = source_.as<reyer::plugin::IEyeSource>()) {
             pipeline_.setSource(src);
             spdlog::info("Pipeline: configured source '{}'", source_.getName());
-        }
-
-        if (calibration_) {
-            if (auto *cal = calibration_->as<reyer::plugin::ICalibration>()) {
-                pipeline_.setCalibration(cal);
-                spdlog::info("Pipeline: configured calibration '{}'",
-                             calibration_->getName());
-            }
         }
 
         for (auto &stage : stages_) {
@@ -97,6 +86,12 @@ class PipelineManager : public threading::Thread<PipelineManager> {
         }
 
         needs_init_.store(true, std::memory_order_release);
+    }
+
+    void SetCalibration(std::shared_ptr<reyer::plugin::ICalibration> cal) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        pipeline_.setCalibration(std::move(cal));
+        spdlog::info("Pipeline: calibration updated");
     }
 
     void ReplaceSink(reyer::plugin::Plugin sink) {
@@ -134,8 +129,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     void initPlugins_() {
         if (source_)
             source_->init();
-        if (calibration_)
-            (*calibration_)->init();
         for (auto &stage : stages_)
             stage->init();
     }
@@ -143,8 +136,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     void shutdownPlugins_() {
         for (auto &stage : stages_)
             stage->shutdown();
-        if (calibration_)
-            (*calibration_)->shutdown();
         if (source_)
             source_->shutdown();
     }
@@ -152,7 +143,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     reyer::plugin::EyePipeline pipeline_;
 
     reyer::plugin::Plugin source_;
-    std::optional<reyer::plugin::Plugin> calibration_;
     std::vector<reyer::plugin::Plugin> stages_;
 
     std::mutex mutex_;

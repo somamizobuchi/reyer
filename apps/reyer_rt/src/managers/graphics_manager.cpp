@@ -176,21 +176,18 @@ void GraphicsManager::Run() {
                 render->render();
                 EndDrawing();
 
-                if (render->getCalibrationPointCount() > 0) {
-                    std::vector<reyer::plugin::CalibrationPoint> points(
-                        render->getCalibrationPointCount());
-                    render->getCalibrationPoints(points.data());
-
-                    auto pm = pipelineManager_.lock();
-                    if (pm) {
-                        if (auto calibration =
-                                pm->pipeline().getCalibration()) {
-                            calibration->pushCalibrationPoints(points.data(),
-                                                               points.size());
-                        } else {
-                            spdlog::warn(
-                                "No calibration plugin loaded in pipeline");
-                        }
+                if (auto cal = render->takeCalibration()) {
+                    if (auto pm = pipelineManager_.lock()) {
+                        // Capture currentTask_ so the plugin .so stays loaded
+                        // for the entire lifetime of the calibration object
+                        auto plugin_anchor = currentTask_;
+                        pm->SetCalibration(
+                            std::shared_ptr<reyer::plugin::ICalibration>(
+                                cal.release(),
+                                [plugin_anchor = std::move(plugin_anchor)](
+                                    reyer::plugin::ICalibration *p) {
+                                    delete p;
+                                }));
                     }
                 }
 

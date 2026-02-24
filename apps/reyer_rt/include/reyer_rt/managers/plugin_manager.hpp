@@ -27,7 +27,6 @@ class PluginManager {
     std::vector<std::string> GetAvailableStages();
     std::vector<std::string> GetAvailableSinks();
     std::vector<std::string> GetAvailableTasks();
-    std::vector<std::string> GetAvailableCalibrations();
 
     std::error_code UnloadPlugin(const std::string &name);
 

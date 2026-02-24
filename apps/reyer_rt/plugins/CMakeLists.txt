@@ -3,7 +3,6 @@ add_subdirectory(dummy_source)
 add_subdirectory(dummy_stage)
 add_subdirectory(dummy_sink)
 add_subdirectory(dummy_filter)
-add_subdirectory(simple_calibration)
 add_subdirectory(simple_filter)
 add_subdirectory(foaw_velocity_filter)
 

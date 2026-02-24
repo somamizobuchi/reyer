@@ -7,6 +7,7 @@
 #include <glaze/json/read.hpp>
 #include <glaze/json/schema.hpp>
 #include <glaze/util/expected.hpp>
+#include <memory>
 #include <mutex>
 #include <string>
 
@@ -118,7 +119,6 @@ struct CalibrationPoint {
 };
 
 struct ICalibration {
-    REYER_DEFINE_INTERFACE_ID(ICalibration);
     virtual void pushCalibrationPoints(const CalibrationPoint *points,
                                        size_t count) = 0;
     virtual void calibrate(core::EyeData *data) = 0;
@@ -140,9 +140,6 @@ class CalibrationBase : public virtual ICalibration {
 
     virtual void
     onCalibrationPointsUpdated(std::span<const CalibrationPoint> points) = 0;
-
-  private:
-    std::vector<CalibrationPoint> calibration_points_;
 };
 
 struct IPlugin : public virtual ILifecycle {
@@ -165,8 +162,7 @@ struct IRender {
     virtual void render() = 0;
     virtual void setRenderContext(core::RenderContext ctx) = 0;
     virtual bool isFinished() const = 0;
-    virtual size_t getCalibrationPointCount() const = 0;
-    virtual void getCalibrationPoints(CalibrationPoint *out_points) = 0;
+    virtual std::unique_ptr<ICalibration> takeCalibration() = 0;
     virtual ~IRender() = default;
 };
 
@@ -279,14 +275,8 @@ class RenderBase : public virtual IRender {
         render_context_ = ctx;
     }
 
-    size_t getCalibrationPointCount() const override {
-        return calibration_points_.size();
-    }
-
-    void getCalibrationPoints(CalibrationPoint *out_points) override {
-        std::copy(calibration_points_.begin(), calibration_points_.end(),
-                  out_points);
-        calibration_points_.clear();
+    std::unique_ptr<ICalibration> takeCalibration() override {
+        return std::move(pending_calibration_);
     }
 
     bool isFinished() const override { return finished_; }
@@ -303,17 +293,17 @@ class RenderBase : public virtual IRender {
 
     void resetFinished() {
         finished_ = false;
-        calibration_points_.clear();
+        pending_calibration_.reset();
     }
 
-    void pushCalibrationPoints(std::vector<CalibrationPoint> points) {
-        calibration_points_ = std::move(points);
+    void pushCalibration(std::unique_ptr<ICalibration> cal) {
+        pending_calibration_ = std::move(cal);
     }
 
   private:
     core::RenderContext render_context_;
     bool finished_ = false;
-    std::vector<CalibrationPoint> calibration_points_;
+    std::unique_ptr<ICalibration> pending_calibration_;
 };
 
 template <typename Config>
