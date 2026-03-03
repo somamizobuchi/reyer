@@ -35,5 +35,4 @@ target_include_directories(${PROJECT_NAME}
 
 target_link_options(${PROJECT_NAME} PRIVATE -rdynamic)
 
-add_subdirectory(plugins)
 add_subdirectory(tests)
