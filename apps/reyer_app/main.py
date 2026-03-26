@@ -1,5 +1,6 @@
 import shutil
 import sys
+import time
 import logging
 import msgspec
 from pathlib import Path
@@ -411,7 +412,14 @@ class ReyerMainWindow(QMainWindow):
         """Show launcher dialog (graphics + pipeline) and initialize runtime."""
         from src.launcher_dialog import LauncherDialog
 
-        monitors = self.client.get_monitors()
+        monitors = None
+        for _ in range(10):
+            monitors = self.client.get_monitors()
+            if monitors:
+                break
+            QApplication.processEvents()
+            time.sleep(0.5)
+
         if not monitors:
             QMessageBox.critical(
                 self,

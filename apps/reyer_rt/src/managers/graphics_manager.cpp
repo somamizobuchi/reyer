@@ -2,17 +2,18 @@
 #include "reyer_rt/managers/broadcast_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
 #include "reyer_rt/utils/utils.hpp"
-#include <atomic>
-#include <chrono>
+#include <SDL3/SDL_video.h>
 #include <cstdarg>
 #include <format>
-#include <memory>
-#include <mutex>
-#include <numbers>
 #include <raylib.h>
 #include <spdlog/spdlog.h>
-#include <thread>
-#include <vector>
+#include "pthread.h"
+
+#define SDL_ENABLE_OLD_NAMES
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_timer.h>
+#include <SDL3/SDL_opengl.h>
+#include <SDL3/SDL_video.h>
 
 namespace reyer_rt::managers {
 
@@ -25,11 +26,22 @@ GraphicsManager::GraphicsManager(
 void GraphicsManager::Init() {
     state_.store(State::DEFAULT, std::memory_order_release);
 
+    struct sched_param param;
+    param.sched_priority = 30;
+    
+    int ret = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
+    if (ret != 0) {
+        spdlog::info("Failed to set thread scheduling: {}", std::strerror(ret));
+    }
+
+    // Setup raylib logging
+    SetTraceLogLevel(LOG_ALL);
+    SetTraceLogCallback(&GraphicsManager::errorCallback_);
+
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
-    SetTraceLogLevel(LOG_WARNING);
-    InitWindow(0, 0, "");
+    InitWindow(800, 600, "");
     pollMonitors_();
-    CloseWindow();
+    // CloseWindow();
 }
 
 void GraphicsManager::errorCallback_(int err, const char *fmt, va_list args) {
@@ -87,23 +99,22 @@ void GraphicsManager::applyGraphicsSettings_(
     if (gs.vsync)
         flags |= FLAG_VSYNC_HINT;
 
-    SetConfigFlags(flags);
-    SetTargetFPS(gs.target_fps);
-    SetTraceLogCallback(&GraphicsManager::errorCallback_);
+    // SetConfigFlags(flags);
+    // InitWindow(gs.width, gs.height, "Reyer");
 
-    InitWindow(640, 480, "Reyer RT");
-    SetWindowMonitor(gs.monitor_index);
-    std::this_thread::sleep_for(std::chrono::milliseconds(300));
-    ClearWindowState(FLAG_WINDOW_HIDDEN);
+    SetWindowState(flags);
+    SetTargetFPS(gs.target_fps);
+
     SetWindowSize(gs.width, gs.height);
+
     if (gs.full_screen && !IsWindowFullscreen()) {
-        ToggleFullscreen();
+        SetWindowState(FLAG_FULLSCREEN_MODE);
+        // ToggleFullscreen();
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Allow time for monitor switch
+    SetWindowMonitor(gs.monitor_index);
+    ClearWindowState(FLAG_WINDOW_HIDDEN);
     SetWindowFocused();
-    auto render_width = GetRenderWidth();
-    auto render_height = GetRenderHeight();
-    spdlog::info("Selected monitor {} with resolution {}x{}", gs.monitor_index,
-                 render_width, render_height);
 
     graphicsSettings_ = settings;
     graphicsInitialized_ = true;
@@ -130,7 +141,7 @@ void GraphicsManager::applyGraphicsSettings_(
                                   settings.view_distance_mm),
     };
 
-    spdlog::info("Monitor: {}", GetMonitorName(gs.monitor_index));
+    spdlog::info("Monitor ({}): {}", gs.monitor_index, GetMonitorName(gs.monitor_index));
     spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
                  gs.target_fps);
     spdlog::info("Resolution: {}x{}, Physical size: {}mm x {}mm, View "
@@ -255,13 +266,37 @@ std::vector<net::message::MonitorInfo> GraphicsManager::GetMonitorInfo() {
 
 void GraphicsManager::pollMonitors_() {
     monitors_.clear();
-    auto count = GetMonitorCount();
+    // auto count = GetMonitorCount();
 
-    for (auto i = 0; i < count; i++) {
-        monitors_.emplace_back(i, GetMonitorWidth(i), GetMonitorHeight(i),
-                               GetMonitorPhysicalWidth(i),
-                               GetMonitorPhysicalHeight(i),
-                               GetMonitorRefreshRate(i), GetMonitorName(i));
+    // for (auto i = 0; i < count; i++) {
+    //     monitors_.emplace_back(i, GetMonitorWidth(i), GetMonitorHeight(i),
+    //                            GetMonitorPhysicalWidth(i),
+    //                            GetMonitorPhysicalHeight(i),
+    //                            GetMonitorRefreshRate(i), GetMonitorName(i));
+    //     spdlog::info("Found monitor {}: {}x{} @ {}Hz, Physical size: {}mm x "
+    //                  "{}mm",
+    //                  i, GetMonitorWidth(i), GetMonitorHeight(i),
+    //                  GetMonitorRefreshRate(i), GetMonitorPhysicalWidth(i),
+    //                  GetMonitorPhysicalHeight(i));
+    // }
+
+    int monitor_count;
+    auto *display_ids = SDL_GetDisplays(&monitor_count);
+
+    for (int i = 0; i < monitor_count; i++) {
+        const SDL_DisplayMode* mode;
+        if ((mode = SDL_GetDesktopDisplayMode(display_ids[i])) == nullptr) {
+            spdlog::error("Failed to get display mode for monitor {}: {}",
+                          i, SDL_GetError());
+            continue;
+        }
+
+        monitors_.emplace_back(
+            display_ids[i], static_cast<uint32_t>(mode->w), static_cast<uint32_t>(mode->h),
+            static_cast<uint32_t>(GetMonitorPhysicalWidth(display_ids[i])),
+            static_cast<uint32_t>(GetMonitorPhysicalHeight(display_ids[i])),
+            static_cast<uint32_t>(std::round(mode->refresh_rate)),
+            SDL_GetDisplayName(display_ids[i]));
     }
 }
 

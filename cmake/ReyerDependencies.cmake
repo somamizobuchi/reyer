@@ -1,6 +1,6 @@
 include(FetchContent)
 
-find_package(raylib REQUIRED)
+find_package(raylib 6.0 REQUIRED)
 
 find_package(HDF5 REQUIRED)
 

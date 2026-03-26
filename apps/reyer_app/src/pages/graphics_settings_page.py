@@ -49,7 +49,7 @@ class GraphicsSettingsPage(QWidget):
         self.monitor_combo = QComboBox()
         for i, monitor in enumerate(self.monitors):
             display_name = f"{monitor.name} ({monitor.width_px}x{monitor.height_px} @ {monitor.refresh_rate}Hz)"
-            self.monitor_combo.addItem(display_name, userData=i)
+            self.monitor_combo.addItem(display_name, userData=monitor.index)
 
         # Select first monitor by default
         if self.monitors:
@@ -202,7 +202,7 @@ class GraphicsSettingsPage(QWidget):
             GraphicsSettings message object
         """
         monitor_index = self.monitor_combo.currentData()
-        if monitor_index is None or monitor_index < 0 or monitor_index >= len(self.monitors):
+        if monitor_index is None or monitor_index < 0:
             monitor_index = 0
 
         return GraphicsSettings(

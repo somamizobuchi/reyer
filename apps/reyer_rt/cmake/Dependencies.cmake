@@ -23,6 +23,7 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glaze)
 
+# SPDLOG
 FetchContent_Declare(
     spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
@@ -33,3 +34,6 @@ FetchContent_Declare(
 set(SPDLOG_BUILD_EXAMPLE OFF)
 set(SPDLOG_BUILD_SHARED ON)
 FetchContent_MakeAvailable(spdlog)
+
+# SDL3
+find_package(SDL3 REQUIRED)

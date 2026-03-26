@@ -3,6 +3,7 @@ project(reyer_rt LANGUAGES CXX)
 add_executable(${PROJECT_NAME} src/main.cpp)
 
 set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(Dependencies)
 
 target_sources(${PROJECT_NAME}
@@ -26,6 +27,7 @@ target_link_libraries(${PROJECT_NAME}
     nng
     glaze::glaze
     spdlog::spdlog
+    SDL3::SDL3
 )
 
 target_include_directories(${PROJECT_NAME}
