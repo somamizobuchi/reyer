@@ -16,7 +16,7 @@
 
 #define REYER_REGISTER_TYPED_INTERFACE(Interface, Type, Alias)                 \
     template <>                                                                \
-    inline constexpr InterfaceID Interface<Type>::iid = {                      \
+    inline const InterfaceID Interface<Type>::iid = {                          \
         reyer::core::hash_string(#Interface "<" #Type ">")};                   \
     using Alias = Interface<Type>;
 
@@ -86,20 +86,20 @@ class ConfigurableBase : public virtual IConfigurable {
 };
 
 template <typename T> struct ISource {
-    static constexpr InterfaceID iid{};
+    static const InterfaceID iid;
     virtual bool waitForData(T &out, std::stop_token stoken) = 0;
     virtual void cancel() = 0;
     virtual ~ISource() = default;
 };
 
 template <typename T> struct IStage {
-    static constexpr InterfaceID iid{};
+    static const InterfaceID iid;
     virtual void process(T &data) = 0;
     virtual ~IStage() = default;
 };
 
 template <typename T> struct ISink {
-    static constexpr InterfaceID iid{};
+    static const InterfaceID iid;
     virtual void consume(const T &data) = 0;
     virtual ~ISink() = default;
 };

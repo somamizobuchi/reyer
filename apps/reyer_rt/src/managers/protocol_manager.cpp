@@ -1,5 +1,6 @@
 #include "reyer_rt/managers/protocol_manager.hpp"
 #include "reyer_rt/managers/graphics_manager.hpp"
+#include "reyer_rt/net/message_types.hpp"
 #include "reyer_rt/utils/utils.hpp"
 #include <format>
 #include <spdlog/spdlog.h>
@@ -150,6 +151,7 @@ net::message::RuntimeState ProtocolManager::GetRuntimeState() const {
     case State::SAVING:
         return net::message::RuntimeState::RUNNING;
     }
+    return net::message::RuntimeState::DEFAULT;
 }
 
 void ProtocolManager::loadProtocol_() {

@@ -266,38 +266,38 @@ std::vector<net::message::MonitorInfo> GraphicsManager::GetMonitorInfo() {
 
 void GraphicsManager::pollMonitors_() {
     monitors_.clear();
-    // auto count = GetMonitorCount();
+    auto count = GetMonitorCount();
 
-    // for (auto i = 0; i < count; i++) {
-    //     monitors_.emplace_back(i, GetMonitorWidth(i), GetMonitorHeight(i),
-    //                            GetMonitorPhysicalWidth(i),
-    //                            GetMonitorPhysicalHeight(i),
-    //                            GetMonitorRefreshRate(i), GetMonitorName(i));
-    //     spdlog::info("Found monitor {}: {}x{} @ {}Hz, Physical size: {}mm x "
-    //                  "{}mm",
-    //                  i, GetMonitorWidth(i), GetMonitorHeight(i),
-    //                  GetMonitorRefreshRate(i), GetMonitorPhysicalWidth(i),
-    //                  GetMonitorPhysicalHeight(i));
-    // }
-
-    int monitor_count;
-    auto *display_ids = SDL_GetDisplays(&monitor_count);
-
-    for (int i = 0; i < monitor_count; i++) {
-        const SDL_DisplayMode* mode;
-        if ((mode = SDL_GetDesktopDisplayMode(display_ids[i])) == nullptr) {
-            spdlog::error("Failed to get display mode for monitor {}: {}",
-                          i, SDL_GetError());
-            continue;
-        }
-
-        monitors_.emplace_back(
-            display_ids[i], static_cast<uint32_t>(mode->w), static_cast<uint32_t>(mode->h),
-            static_cast<uint32_t>(GetMonitorPhysicalWidth(display_ids[i])),
-            static_cast<uint32_t>(GetMonitorPhysicalHeight(display_ids[i])),
-            static_cast<uint32_t>(std::round(mode->refresh_rate)),
-            SDL_GetDisplayName(display_ids[i]));
+    for (auto i = 0; i < count; i++) {
+        monitors_.emplace_back(i, GetMonitorWidth(i), GetMonitorHeight(i),
+                               GetMonitorPhysicalWidth(i),
+                               GetMonitorPhysicalHeight(i),
+                               GetMonitorRefreshRate(i), GetMonitorName(i));
+        spdlog::info("Found monitor {}: {}x{} @ {}Hz, Physical size: {}mm x "
+                     "{}mm",
+                     i, GetMonitorWidth(i), GetMonitorHeight(i),
+                     GetMonitorRefreshRate(i), GetMonitorPhysicalWidth(i),
+                     GetMonitorPhysicalHeight(i));
     }
+
+    // int monitor_count;
+    // auto *display_ids = SDL_GetDisplays(&monitor_count);
+
+    // for (int i = 0; i < monitor_count; i++) {
+    //     const SDL_DisplayMode* mode;
+    //     if ((mode = SDL_GetDesktopDisplayMode(display_ids[i])) == nullptr) {
+    //         spdlog::error("Failed to get display mode for monitor {}: {}",
+    //                       i, SDL_GetError());
+    //         continue;
+    //     }
+
+    //     monitors_.emplace_back(
+    //         display_ids[i], static_cast<uint32_t>(mode->w), static_cast<uint32_t>(mode->h),
+    //         static_cast<uint32_t>(GetMonitorPhysicalWidth(display_ids[i])),
+    //         static_cast<uint32_t>(GetMonitorPhysicalHeight(display_ids[i])),
+    //         static_cast<uint32_t>(std::round(mode->refresh_rate)),
+    //         SDL_GetDisplayName(display_ids[i]));
+    // }
 }
 
 std::optional<net::message::GraphicsSettings>
