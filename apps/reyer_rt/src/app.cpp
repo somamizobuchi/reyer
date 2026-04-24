@@ -1,9 +1,7 @@
 #include "reyer_rt/app.hpp"
-#include "reyer_rt/experiment/protocol.hpp"
 #include "reyer_rt/managers/graphics_manager.hpp"
 #include "reyer_rt/managers/plugin_manager.hpp"
 #include <filesystem>
-#include <format>
 #include <memory>
 #include <print>
 #include <spdlog/spdlog.h>
