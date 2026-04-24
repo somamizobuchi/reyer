@@ -2,18 +2,11 @@
 #include "reyer_rt/managers/broadcast_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
 #include "reyer_rt/utils/utils.hpp"
-#include <SDL3/SDL_video.h>
 #include <cstdarg>
 #include <format>
 #include <raylib.h>
 #include <spdlog/spdlog.h>
 #include "pthread.h"
-
-#define SDL_ENABLE_OLD_NAMES
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_timer.h>
-#include <SDL3/SDL_opengl.h>
-#include <SDL3/SDL_video.h>
 
 namespace reyer_rt::managers {
 
@@ -279,25 +272,6 @@ void GraphicsManager::pollMonitors_() {
                      GetMonitorRefreshRate(i), GetMonitorPhysicalWidth(i),
                      GetMonitorPhysicalHeight(i));
     }
-
-    // int monitor_count;
-    // auto *display_ids = SDL_GetDisplays(&monitor_count);
-
-    // for (int i = 0; i < monitor_count; i++) {
-    //     const SDL_DisplayMode* mode;
-    //     if ((mode = SDL_GetDesktopDisplayMode(display_ids[i])) == nullptr) {
-    //         spdlog::error("Failed to get display mode for monitor {}: {}",
-    //                       i, SDL_GetError());
-    //         continue;
-    //     }
-
-    //     monitors_.emplace_back(
-    //         display_ids[i], static_cast<uint32_t>(mode->w), static_cast<uint32_t>(mode->h),
-    //         static_cast<uint32_t>(GetMonitorPhysicalWidth(display_ids[i])),
-    //         static_cast<uint32_t>(GetMonitorPhysicalHeight(display_ids[i])),
-    //         static_cast<uint32_t>(std::round(mode->refresh_rate)),
-    //         SDL_GetDisplayName(display_ids[i]));
-    // }
 }
 
 std::optional<net::message::GraphicsSettings>

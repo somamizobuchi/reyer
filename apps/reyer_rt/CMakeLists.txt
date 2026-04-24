@@ -21,13 +21,12 @@ target_sources(${PROJECT_NAME}
     ${CMAKE_CURRENT_SOURCE_DIR}/src/net/subscribe_socket.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} 
+target_link_libraries(${PROJECT_NAME}
     PRIVATE
     reyer
     nng
     glaze::glaze
     spdlog::spdlog
-    SDL3::SDL3
 )
 
 target_include_directories(${PROJECT_NAME}

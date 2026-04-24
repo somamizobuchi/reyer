@@ -34,6 +34,3 @@ FetchContent_Declare(
 set(SPDLOG_BUILD_EXAMPLE OFF)
 set(SPDLOG_BUILD_SHARED ON)
 FetchContent_MakeAvailable(spdlog)
-
-# SDL3
-find_package(SDL3 REQUIRED)
