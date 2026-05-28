@@ -34,7 +34,7 @@ void GraphicsManager::Init() {
     SetConfigFlags(FLAG_WINDOW_HIDDEN);
     InitWindow(800, 600, "");
     pollMonitors_();
-    // CloseWindow();
+    CloseWindow();
 }
 
 void GraphicsManager::errorCallback_(int err, const char *fmt, va_list args) {
@@ -92,18 +92,22 @@ void GraphicsManager::applyGraphicsSettings_(
     if (gs.vsync)
         flags |= FLAG_VSYNC_HINT;
 
-    // SetConfigFlags(flags);
-    // InitWindow(gs.width, gs.height, "Reyer");
+    if (gs.full_screen) {
+        flags |= FLAG_FULLSCREEN_MODE;
+    }
 
-    SetWindowState(flags);
+    SetConfigFlags(flags);
+    InitWindow(gs.width, gs.height, "Reyer");
+
+    // SetWindowState(flags);
     SetTargetFPS(gs.target_fps);
 
     SetWindowSize(gs.width, gs.height);
 
-    if (gs.full_screen && !IsWindowFullscreen()) {
-        SetWindowState(FLAG_FULLSCREEN_MODE);
-        // ToggleFullscreen();
-    }
+    // if (gs.full_screen && !IsWindowFullscreen()) {
+    //     SetWindowState(FLAG_FULLSCREEN_MODE);
+    //     // ToggleFullscreen();
+    // }
     std::this_thread::sleep_for(std::chrono::milliseconds(100)); // Allow time for monitor switch
     SetWindowMonitor(gs.monitor_index);
     ClearWindowState(FLAG_WINDOW_HIDDEN);
