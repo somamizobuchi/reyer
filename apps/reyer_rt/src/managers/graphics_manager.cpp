@@ -19,13 +19,8 @@ GraphicsManager::GraphicsManager(
 void GraphicsManager::Init() {
     state_.store(State::DEFAULT, std::memory_order_release);
 
-    struct sched_param param;
-    param.sched_priority = 30;
-    
-    int ret = pthread_setschedparam(pthread_self(), SCHED_RR, &param);
-    if (ret != 0) {
-        spdlog::info("Failed to set thread scheduling: {}", std::strerror(ret));
-    }
+    // Real-time priority is only held while actively rendering an
+    // experiment; see setRealtimePriority_().
 
     // Setup raylib logging
     SetTraceLogLevel(LOG_ALL);
@@ -35,6 +30,24 @@ void GraphicsManager::Init() {
     InitWindow(800, 600, "");
     pollMonitors_();
     CloseWindow();
+}
+
+void GraphicsManager::setRealtimePriority_(bool enable) {
+    if (enable == isRealtime_) {
+        return;
+    }
+
+    struct sched_param param;
+    param.sched_priority = enable ? 30 : 0;
+    int policy = enable ? SCHED_RR : SCHED_OTHER;
+
+    int ret = pthread_setschedparam(pthread_self(), policy, &param);
+    if (ret != 0) {
+        spdlog::info("Failed to set thread scheduling: {}", std::strerror(ret));
+        return;
+    }
+
+    isRealtime_ = enable;
 }
 
 void GraphicsManager::errorCallback_(int err, const char *fmt, va_list args) {
@@ -162,6 +175,9 @@ void GraphicsManager::Run() {
         }
 
         case State::READY: {
+            // Plugin init (and the idle/standby path below) should never
+            // run at real-time priority.
+            setRealtimePriority_(false);
             pollTaskQueue_();
 
             bool hasTask = false;
@@ -178,6 +194,10 @@ void GraphicsManager::Run() {
                     ClearCurrentTask();
                     break;
                 }
+
+                // Real-time priority only while actually driving the
+                // experiment's render loop.
+                setRealtimePriority_(true);
 
                 BeginDrawing();
                 ClearBackground({128, 128, 128});
@@ -217,6 +237,7 @@ void GraphicsManager::Run() {
 }
 
 void GraphicsManager::Shutdown() {
+    setRealtimePriority_(false);
     {
         std::lock_guard<std::mutex> lock(taskMutex_);
         if (currentTask_) {

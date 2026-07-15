@@ -73,6 +73,7 @@ class GraphicsManager {
     applyGraphicsSettings_(net::message::GraphicsSettingsPromise &gfx_promise);
     static void errorCallback_(int code, const char *message, va_list args);
     void pollTaskQueue_();
+    void setRealtimePriority_(bool enable);
 
     std::atomic<State> state_{};
     std::atomic<bool> stop_requested_{false};
@@ -99,6 +100,11 @@ class GraphicsManager {
     std::optional<std::string> standbyProtocolName_;
 
     std::atomic<bool> startRequested_{false};
+
+    // Tracks whether this thread currently holds SCHED_RR priority, so it is
+    // only elevated while actively rendering an experiment (not during
+    // plugin init/shutdown or the standby screen).
+    bool isRealtime_{false};
 };
 
 } // namespace reyer_rt::managers
