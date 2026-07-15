@@ -5,23 +5,33 @@
 
 namespace reyer::plugin {
 
+// The pipeline holds shared ownership of everything it references so that a
+// source/stage/sink cannot be destroyed by another thread while processData()
+// still holds it. Callers must serialize processData() against mutation (the
+// PipelineManager does this via its mutex).
 template <typename T> class Pipeline {
   public:
-    void setSource(ISource<T> *source) { source_ = source; }
+    void setSource(std::shared_ptr<ISource<T>> source) {
+        source_ = std::move(source);
+    }
 
-    void addStage(IStage<T> *stage) { stages_.push_back(stage); }
+    void addStage(std::shared_ptr<IStage<T>> stage) {
+        stages_.push_back(std::move(stage));
+    }
 
-    void addSink(ISink<T> *sink) { sinks_.push_back(sink); }
+    void addSink(std::shared_ptr<ISink<T>> sink) {
+        sinks_.push_back(std::move(sink));
+    }
 
     virtual void processData(T data) {
-        for (auto *stage : stages_)
+        for (auto &stage : stages_)
             stage->process(data);
 
-        for (auto *sink : sinks_)
+        for (auto &sink : sinks_)
             sink->consume(data);
     }
 
-    ISource<T> *getSourceInterface() const { return source_; }
+    ISource<T> *getSourceInterface() const { return source_.get(); }
 
     virtual void clear() {
         if (source_)
@@ -40,9 +50,9 @@ template <typename T> class Pipeline {
     virtual ~Pipeline() = default;
 
   private:
-    ISource<T> *source_ = nullptr;
-    std::vector<IStage<T> *> stages_;
-    std::vector<ISink<T> *> sinks_;
+    std::shared_ptr<ISource<T>> source_;
+    std::vector<std::shared_ptr<IStage<T>>> stages_;
+    std::vector<std::shared_ptr<ISink<T>>> sinks_;
 };
 
 class EyeDataPipeline : public Pipeline<core::EyeData> {

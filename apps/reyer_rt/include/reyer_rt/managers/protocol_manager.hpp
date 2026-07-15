@@ -77,7 +77,7 @@ class ProtocolManager : public threading::Thread<ProtocolManager> {
 
     std::shared_ptr<reyer::h5::File> currentFile_;
     std::unique_ptr<reyer::h5::Group> currentGroup_;
-    std::unique_ptr<stages::EyeDataWriter> eyeDataWriter_;
+    std::shared_ptr<stages::EyeDataWriter> eyeDataWriter_;
 };
 
 } // namespace reyer_rt::managers

@@ -32,8 +32,6 @@ struct InterfaceID {
 
 struct ILifecycle {
     virtual void init() = 0;
-    virtual void pause() = 0;
-    virtual void resume() = 0;
     virtual void shutdown() = 0;
     virtual void reset() = 0;
     virtual ~ILifecycle() = default;
@@ -180,8 +178,6 @@ class PluginBase : public IPlugin, public virtual Interfaces... {
 
     virtual void init() override { onInit(); }
     virtual void shutdown() override { onShutdown(); }
-    virtual void pause() override { onPause(); }
-    virtual void resume() override { onResume(); }
     virtual void reset() override { onReset(); }
 
     virtual void setName(const char *name) override { name_ = name; }
@@ -193,8 +189,6 @@ class PluginBase : public IPlugin, public virtual Interfaces... {
   protected:
     virtual void onInit() = 0;
     virtual void onShutdown() = 0;
-    virtual void onPause() = 0;
-    virtual void onResume() = 0;
     virtual void onReset() = 0;
 
     ~PluginBase() = default;
@@ -217,14 +211,27 @@ class SourceBase : public virtual ISource<T>,
                    public core::Thread<SourceBase<T>> {
   public:
     bool waitForData(T &out, std::stop_token stoken) override final {
+        // Wait on our internal cancel token. Link the caller's token to it for
+        // the duration of this wait so a pipeline-thread stop also wakes us;
+        // cancel() triggers the same token directly. The stop_callback is
+        // destroyed before we return, so no callback outlives this call.
+        std::stop_token cancel_token = cancelToken_();
         std::stop_callback cb(stoken, [this] { cancel(); });
-        return output_queue_.wait_and_pop(out, cancel_source_.get_token());
+        return output_queue_.wait_and_pop(out, cancel_token);
     }
 
-    void cancel() override final { cancel_source_.request_stop(); }
+    void cancel() override final {
+        std::lock_guard<std::mutex> lock(cancel_mutex_);
+        cancel_source_.request_stop();
+    }
 
     void startProducing() {
-        cancel_source_ = std::stop_source{};
+        // Fresh token per production run: a previous cancel()/stop must not
+        // leave the source permanently stopped when it is reused.
+        {
+            std::lock_guard<std::mutex> lock(cancel_mutex_);
+            cancel_source_ = std::stop_source{};
+        }
         this->Spawn();
     }
 
@@ -243,7 +250,13 @@ class SourceBase : public virtual ISource<T>,
     virtual bool onProduce(T &out) = 0;
 
   private:
+    std::stop_token cancelToken_() {
+        std::lock_guard<std::mutex> lock(cancel_mutex_);
+        return cancel_source_.get_token();
+    }
+
     core::Queue<T> output_queue_;
+    std::mutex cancel_mutex_;
     std::stop_source cancel_source_;
 };
 
@@ -313,12 +326,20 @@ class RenderPluginBase
     RenderPluginBase() {};
 
     void init() override {
-        PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase>::init();
+        // Hold mutex_ across onInit() so it cannot race with consume()/render()
+        // on the pipeline/graphics threads. initialized_ gates consume() until
+        // onInit() has fully run.
         std::lock_guard<std::mutex> lock(mutex_);
+        PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase>::init();
         initialized_ = true;
     }
 
     void reset() override final {
+        // Serialize teardown against consume()/render(). Drop initialized_
+        // first so no consume() runs against a reset-but-not-reinitialized
+        // plugin.
+        std::lock_guard<std::mutex> lock(mutex_);
+        initialized_ = false;
         RenderBase::resetFinished();
         PluginBase<RenderBase, ConfigurableBase<Config>, EyeSinkBase>::reset();
     }

@@ -320,7 +320,7 @@ MessageManager::MessageVisitor::operator()(
         return std::unexpected(pipeline_manager.error());
 
     // Resolve source plugin
-    auto source = plugin_manager.value()->GetPlugin(request.pipeline_source);
+    auto source = plugin_manager.value()->CreateInstance(request.pipeline_source);
     if (!source) {
         spdlog::warn("Pipeline source '{}' not found",
                      request.pipeline_source);
@@ -330,7 +330,7 @@ MessageManager::MessageVisitor::operator()(
     // Resolve stage plugins
     std::vector<reyer::plugin::Plugin> stages;
     for (const auto &stage_name : request.pipeline_stages) {
-        auto stage = plugin_manager.value()->GetPlugin(stage_name);
+        auto stage = plugin_manager.value()->CreateInstance(stage_name);
         if (stage)
             stages.push_back(stage.value());
         else

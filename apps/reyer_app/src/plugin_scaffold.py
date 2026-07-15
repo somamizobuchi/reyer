@@ -119,8 +119,6 @@ class {pascal} : public RenderPluginBase<{pascal}Config> {{
   protected:
     void onInit() override;
     void onShutdown() override;
-    void onPause() override;
-    void onResume() override;
     void onReset() override;
 
     void onRender() override;
@@ -144,12 +142,6 @@ void {pascal}::onInit() {{
 }}
 
 void {pascal}::onShutdown() {{
-}}
-
-void {pascal}::onPause() {{
-}}
-
-void {pascal}::onResume() {{
 }}
 
 void {pascal}::onReset() {{

@@ -180,18 +180,18 @@ void GraphicsManager::Run() {
             setRealtimePriority_(false);
             pollTaskQueue_();
 
-            bool hasTask = false;
-            {
-                std::lock_guard<std::mutex> lock(taskMutex_);
-                hasTask = static_cast<bool>(currentTask_);
-            }
+            // Hold taskMutex_ for the whole render so the task can't be
+            // retired/reassigned by another thread mid-frame.
+            std::unique_lock<std::mutex> lock(taskMutex_);
 
-            if (hasTask) {
+            if (currentTask_) {
                 // Render the active task
                 auto *render = currentTask_.as<reyer::plugin::IRender>();
                 if (!render) {
                     spdlog::error("No valid render plugin loaded");
-                    ClearCurrentTask();
+                    retireTask_(std::move(currentTask_));
+                    currentTask_ = reyer::plugin::Plugin();
+                    taskFinished_.store(false, std::memory_order_release);
                     break;
                 }
 
@@ -223,6 +223,7 @@ void GraphicsManager::Run() {
                     taskFinished_.store(true, std::memory_order_release);
                 }
             } else {
+                lock.unlock();
                 showStandbyScreen_();
             }
 
@@ -241,9 +242,15 @@ void GraphicsManager::Shutdown() {
     {
         std::lock_guard<std::mutex> lock(taskMutex_);
         if (currentTask_) {
-            currentTask_->shutdown();
+            retireTask_(std::move(currentTask_));
             currentTask_ = reyer::plugin::Plugin();
         }
+        // Fulfil any teardown promises left pending so callers don't block.
+        clearRequested_ = false;
+        for (auto &p : clearPromises_) {
+            p.set_value();
+        }
+        clearPromises_.clear();
     }
 
     if (IsWindowReady()) {
@@ -321,14 +328,56 @@ void GraphicsManager::SetCurrentTask(reyer::plugin::Plugin task) {
     taskFinished_.store(false, std::memory_order_release);
 }
 
+void GraphicsManager::retireTask_(reyer::plugin::Plugin task) {
+    // Runs on the graphics thread. reset()+shutdown() may touch Raylib/GL
+    // state, so they must only ever run here.
+    if (task) {
+        spdlog::info("Shutting down task \"{}\"", task.getName());
+        task->reset();
+        task->shutdown();
+    }
+}
+
 void GraphicsManager::pollTaskQueue_() {
     reyer::plugin::Plugin pending;
+    reyer::plugin::Plugin outgoing;
+    std::vector<std::promise<void>> promises;
     {
         std::lock_guard<std::mutex> lock(taskMutex_);
-        if (!pendingTask_) {
-            return;
+
+        // Retire the current task if a clear was requested. If a new task is
+        // also pending it will replace the outgoing one below.
+        if (clearRequested_) {
+            outgoing = std::move(currentTask_);
+            currentTask_ = reyer::plugin::Plugin();
+            taskFinished_.store(false, std::memory_order_release);
+            clearRequested_ = false;
+            promises = std::move(clearPromises_);
+            clearPromises_.clear();
         }
-        pending = std::move(pendingTask_);
+
+        if (pendingTask_) {
+            // Replacing a live task: retire it first (still on this thread).
+            if (currentTask_) {
+                outgoing = std::move(currentTask_);
+                currentTask_ = reyer::plugin::Plugin();
+            }
+            pending = std::move(pendingTask_);
+            pendingTask_ = reyer::plugin::Plugin();
+        }
+    }
+
+    // Tear down the outgoing task before initialising the incoming one so the
+    // shutdown/init ordering is preserved.
+    if (outgoing) {
+        retireTask_(std::move(outgoing));
+    }
+    for (auto &p : promises) {
+        p.set_value();
+    }
+
+    if (!pending) {
+        return;
     }
 
     if (!pending.getPath().empty()) {
@@ -352,10 +401,24 @@ void GraphicsManager::pollTaskQueue_() {
     currentTask_ = std::move(pending);
 }
 
-void GraphicsManager::ClearCurrentTask() {
+std::future<void> GraphicsManager::ClearCurrentTask() {
+    std::promise<void> promise;
+    auto future = promise.get_future();
+
     std::lock_guard<std::mutex> lock(taskMutex_);
-    currentTask_ = reyer::plugin::Plugin();
+
+    // Nothing to tear down (and nothing pending to tear down): resolve now.
+    if (!currentTask_ && !pendingTask_ && !clearRequested_) {
+        promise.set_value();
+        return future;
+    }
+
+    // Defer teardown to the graphics thread via pollTaskQueue_(); it runs
+    // reset()+shutdown() and then fulfils these promises.
+    clearRequested_ = true;
     taskFinished_.store(false, std::memory_order_release);
+    clearPromises_.push_back(std::move(promise));
+    return future;
 }
 
 bool GraphicsManager::IsCurrentTaskFinished() const {

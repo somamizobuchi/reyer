@@ -43,8 +43,15 @@ class GraphicsManager {
 
     // Task management — called by ProtocolManager from its thread.
     // These are thread-safe via queue.
+    //
+    // The full task lifecycle (init/render/reset/shutdown) always runs on the
+    // graphics thread. SetCurrentTask stages a task; the graphics thread will
+    // shut down any outgoing task, then init() the new one before rendering.
     void SetCurrentTask(reyer::plugin::Plugin task);
-    void ClearCurrentTask();
+    // Retire the current task. reset()+shutdown() run on the graphics thread.
+    // Returns a future that becomes ready once teardown has completed; callers
+    // that require the task to be torn down before proceeding should wait on it.
+    std::future<void> ClearCurrentTask();
     bool IsCurrentTaskFinished() const;
 
     // Protocol info for standby screen — called by ProtocolManager
@@ -89,10 +96,17 @@ class GraphicsManager {
     reyer::core::Queue<net::message::GraphicsSettingsPromise>
         graphicsSettingsQueue_;
 
+    // Retire (reset+shutdown) a task on the graphics thread and fulfil any
+    // promises waiting on its teardown.
+    void retireTask_(reyer::plugin::Plugin task);
+
     // Current task being rendered (set by ProtocolManager via queue)
     std::mutex taskMutex_;
     reyer::plugin::Plugin currentTask_;
     reyer::plugin::Plugin pendingTask_; // waiting to be init'd on gfx thread
+    bool clearRequested_{false};        // retire currentTask_ on gfx thread
+    // Promises fulfilled once a requested teardown completes on the gfx thread.
+    std::vector<std::promise<void>> clearPromises_;
     std::atomic<bool> taskFinished_{false};
 
     // Standby screen info
