@@ -1,10 +1,10 @@
 #pragma once
 
-#include <atomic>
-#include <condition_variable>
+#include <functional>
 #include <mutex>
 #include <stop_token>
 #include <thread>
+#include <vector>
 
 namespace reyer::core {
 
@@ -29,18 +29,12 @@ class Thread {
         thread_.join();
     }
 
-    void Pause() {
-        if (!thread_.joinable())
-            return;
-        pause_requested_.store(true, std::memory_order_release);
-        pause_cv_.notify_one();
-    }
-
-    void Resume() {
-        if (!thread_.joinable())
-            return;
-        pause_requested_.store(false, std::memory_order_release);
-        pause_cv_.notify_one();
+    // Queue a callable to run on this thread's loop, before the next Run()
+    // iteration. Use this to execute work that must happen on the owning
+    // thread (e.g. lifecycle calls) from another thread.
+    void postTask(std::function<void()> task) {
+        std::lock_guard<std::mutex> lock(tasks_mutex_);
+        tasks_.push_back(std::move(task));
     }
 
     ~Thread() {};
@@ -52,9 +46,8 @@ class Thread {
 
   private:
     std::jthread thread_;
-    std::condition_variable_any pause_cv_;
-    std::mutex pause_mtx_;
-    std::atomic<bool> pause_requested_{false};
+    std::mutex tasks_mutex_;
+    std::vector<std::function<void()>> tasks_;
 
     void init_() { static_cast<Derived *>(this)->Init(); }
 
@@ -62,24 +55,21 @@ class Thread {
 
     void shutdown_() { static_cast<Derived *>(this)->Shutdown(); }
 
+    void drainTasks_() {
+        std::vector<std::function<void()>> pending;
+        {
+            std::lock_guard<std::mutex> lock(tasks_mutex_);
+            pending.swap(tasks_);
+        }
+        for (auto &task : pending)
+            task();
+    }
+
     void threadFcn_(std::stop_token stop_token) {
         init_();
 
         while (!stop_token.stop_requested()) {
-            // Check for pause request
-            if (pause_requested_.load(std::memory_order_acquire)) {
-                std::unique_lock<std::mutex> mtx(pause_mtx_);
-                bool resume = pause_cv_.wait_for(
-                    mtx, stop_token, std::chrono::milliseconds(10),
-                    [&] { return !pause_requested_; });
-                // Shutdown request
-                if (stop_token.stop_requested())
-                    break;
-                // Timeout
-                if (!resume)
-                    continue;
-            }
-            // Run thread operation
+            drainTasks_();
             run_();
         }
 

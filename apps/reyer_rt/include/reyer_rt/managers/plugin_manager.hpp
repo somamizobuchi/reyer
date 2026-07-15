@@ -20,8 +20,17 @@ class PluginManager {
 
     std::error_code LoadPlugin(const std::string &path);
 
+    // Returns a shared template instance for cheap metadata/schema queries.
+    // Do NOT run a task/pipeline through this instance — it is shared across
+    // all callers. Use CreateInstance() for anything that runs a lifecycle.
     std::expected<reyer::plugin::Plugin, std::error_code>
     GetPlugin(const std::string &name);
+
+    // Returns a Plugin owning a freshly-constructed instance of the named
+    // plugin, independent of the shared template and of other instances. Use
+    // this for every execution run (protocol tasks, pipeline source/stages).
+    std::expected<reyer::plugin::Plugin, std::error_code>
+    CreateInstance(const std::string &name);
 
     std::vector<std::string> GetAvailableSources();
     std::vector<std::string> GetAvailableStages();

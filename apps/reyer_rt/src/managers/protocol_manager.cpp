@@ -48,7 +48,7 @@ void ProtocolManager::Run() {
         // We check if the task finished via GraphicsManager notification.
         auto gfx = graphicsManager_.lock();
         if (gfx && gfx->IsCurrentTaskFinished()) {
-            gfx->ClearCurrentTask();
+            // Teardown is handled by loadTask_(NEXT) below (on the gfx thread).
             EnqueueCommand(net::message::Command::NEXT);
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
@@ -103,13 +103,10 @@ void ProtocolManager::cleanupCurrentTask_() {
     currentGroup_.reset();
 
     if (currentTask_) {
-        spdlog::info("Shutting down task \"{}\"", currentTask_.getName());
-        currentTask_->reset();
-        currentTask_->shutdown();
-
-        // Tell GraphicsManager to stop rendering this task
+        // Teardown (reset+shutdown) runs on the graphics thread. Wait for it
+        // to complete before releasing our handle so ordering is preserved.
         if (auto gfx = graphicsManager_.lock()) {
-            gfx->ClearCurrentTask();
+            gfx->ClearCurrentTask().wait();
         }
         currentTask_ = reyer::plugin::Plugin();
     }
@@ -289,13 +286,11 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
         }
         currentGroup_.reset();
 
-        spdlog::info("Shutting down task \"{}\"", currentTask_.getName());
-        currentTask_->reset();
-        currentTask_->shutdown();
-
-        // Remove from graphics
+        // Teardown (reset+shutdown) runs on the graphics thread. Wait for it
+        // to complete before loading the next task so shutdown() strictly
+        // precedes the next task's init().
         if (auto gfx = graphicsManager_.lock()) {
-            gfx->ClearCurrentTask();
+            gfx->ClearCurrentTask().wait();
         }
 
         net::message::ProtocolEventMessage event{
@@ -320,7 +315,7 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
 
     auto task = currentProtocol_->tasks[nextIndex];
     spdlog::info("Loading task \"{}\"", task.name);
-    auto plugin = plg_mngr->GetPlugin(task.name);
+    auto plugin = plg_mngr->CreateInstance(task.name); // fresh instance per run
 
     if (!plugin) {
         spdlog::error("Failed to load task \"{}\": {}", task.name,
@@ -359,9 +354,15 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
             auto group_name = std::format("task_{:03d}", currentTaskIndex_);
             currentGroup_ = std::make_unique<reyer::h5::Group>(
                 currentFile_->get(), group_name);
-            eyeDataWriter_ = std::make_unique<stages::EyeDataWriter>(
+            eyeDataWriter_ = std::make_shared<stages::EyeDataWriter>(
                 currentGroup_->get());
-            pipeline_mgr->AddSink(eyeDataWriter_.get());
+            // Hand the pipeline a shared_ptr<ISink> that shares ownership with
+            // eyeDataWriter_ (aliasing ctor) so it keeps the writer alive for
+            // as long as it is registered as a sink. ISink is a virtual base,
+            // so this relies on the implicit upcast, not static_pointer_cast.
+            pipeline_mgr->AddSink(
+                std::shared_ptr<reyer::plugin::ISink<reyer::core::EyeData>>(
+                    eyeDataWriter_, eyeDataWriter_.get()));
             eyeDataWriter_->Spawn();
         }
     }

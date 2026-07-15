@@ -74,6 +74,22 @@ PluginManager::GetPlugin(const std::string &name) {
     return it->second; // Returns copy, shares ownership via shared_ptr
 }
 
+std::expected<reyer::plugin::Plugin, std::error_code>
+PluginManager::CreateInstance(const std::string &name) {
+    std::shared_lock lock(plugins_mutex_);
+    auto it = plugins_.find(name);
+    if (it == plugins_.end()) {
+        return std::unexpected(
+            std::make_error_code(std::errc::no_such_device_or_address));
+    }
+    auto instance = it->second.clone(); // fresh, independent IPlugin instance
+    if (!instance) {
+        return std::unexpected(
+            std::make_error_code(std::errc::executable_format_error));
+    }
+    return instance;
+}
+
 std::vector<std::string> PluginManager::GetAvailableSources() {
     std::shared_lock lock(plugins_mutex_);
     std::vector<std::string> result;

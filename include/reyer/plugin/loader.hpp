@@ -37,16 +37,24 @@ class Plugin {
 
     Plugin(void *handle, PluginCreateFcn *create, PluginDestroyFcn *destroy,
            PluginInfo info, std::filesystem::path path = {})
-        : info_(std::move(info)), path_(std::move(path)) {
-        // Shared handle with custom deleter
+        : create_(create), destroy_(destroy), info_(std::move(info)),
+          path_(std::move(path)) {
+        // Shared handle with custom deleter — keeps the .so loaded for as long
+        // as any Plugin (template or clone) derived from it is alive.
         handle_ = std::shared_ptr<void>(handle, [](void* h) {
             if (h) dlclose(h);
         });
 
-        // Shared plugin instance with custom deleter
-        instance_ = std::shared_ptr<IPlugin>(create(), [destroy](IPlugin* p) {
-            if (p && destroy) destroy(p);
-        });
+        instance_ = makeInstance_();
+    }
+
+    // Create a new Plugin that shares the same loaded library and factory but
+    // owns a freshly-constructed IPlugin instance. Use this to obtain an
+    // independent instance per execution run instead of sharing one singleton.
+    Plugin clone() const {
+        Plugin copy(*this);              // shares handle_, factory, info_, path_
+        copy.instance_ = makeInstance_(); // ...but a brand-new instance
+        return copy;
     }
 
     // Copyable - shares ownership via shared_ptr
@@ -72,7 +80,32 @@ class Plugin {
         return instance_->queryInterface<T>();
     }
 
+    // Like as<T>(), but returns a shared_ptr<T> that shares ownership with the
+    // underlying instance (aliasing constructor). Holding it keeps the plugin
+    // instance — and therefore its .so — alive, so consumers can store the
+    // interface pointer safely without racing the Plugin's destruction.
+    // Returns nullptr if the instance does not expose interface T.
+    template <typename T>
+    std::shared_ptr<T> asShared() const {
+        if (!instance_) return nullptr;
+        T *iface = instance_->queryInterface<T>();
+        if (!iface) return nullptr;
+        return std::shared_ptr<T>(instance_, iface);
+    }
+
   private:
+    std::shared_ptr<IPlugin> makeInstance_() const {
+        if (!create_)
+            return nullptr;
+        return std::shared_ptr<IPlugin>(create_(), [destroy = destroy_](
+                                                        IPlugin *p) {
+            if (p && destroy)
+                destroy(p);
+        });
+    }
+
+    PluginCreateFcn *create_{nullptr};
+    PluginDestroyFcn *destroy_{nullptr};
     std::shared_ptr<void> handle_;
     std::shared_ptr<IPlugin> instance_;
     PluginInfo info_;

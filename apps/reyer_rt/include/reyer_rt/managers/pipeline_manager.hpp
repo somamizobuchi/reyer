@@ -1,7 +1,6 @@
 #pragma once
 
 #include "reyer_rt/threading/thread.hpp"
-#include <atomic>
 #include <memory>
 #include <mutex>
 #include <reyer/core/core.hpp>
@@ -26,12 +25,6 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     }
 
     void Run() {
-        if (needs_init_.exchange(false, std::memory_order_acq_rel)) {
-            std::lock_guard<std::mutex> lock(mutex_);
-            initPlugins_();
-            spdlog::info("Pipeline: plugins initialized on pipeline thread");
-        }
-
         reyer::plugin::ISource<reyer::core::EyeData> *source = nullptr;
         {
             std::lock_guard<std::mutex> lock(mutex_);
@@ -72,20 +65,25 @@ class PipelineManager : public threading::Thread<PipelineManager> {
         source_ = source;
         stages_ = std::move(stages);
 
-        if (auto *src = source_.as<reyer::plugin::IEyeSource>()) {
-            pipeline_.setSource(src);
+        if (auto src = source_.asShared<reyer::plugin::IEyeSource>()) {
+            pipeline_.setSource(std::move(src));
             spdlog::info("Pipeline: configured source '{}'", source_.getName());
         }
 
         for (auto &stage : stages_) {
-            if (auto *stg = stage.as<reyer::plugin::IEyeStage>()) {
-                pipeline_.addStage(stg);
+            if (auto stg = stage.asShared<reyer::plugin::IEyeStage>()) {
+                pipeline_.addStage(std::move(stg));
                 spdlog::info("Pipeline: configured stage '{}'",
                              stage.getName());
             }
         }
 
-        needs_init_.store(true, std::memory_order_release);
+        // Initialise the new source/stages on the pipeline thread, not here.
+        postTask([this] {
+            std::lock_guard<std::mutex> lock(mutex_);
+            initPlugins_();
+            spdlog::info("Pipeline: plugins initialized on pipeline thread");
+        });
     }
 
     void SetCalibration(std::shared_ptr<reyer::plugin::ICalibration> cal) {
@@ -98,15 +96,15 @@ class PipelineManager : public threading::Thread<PipelineManager> {
         std::lock_guard<std::mutex> lock(mutex_);
         pipeline_.clearSinks();
 
-        if (auto *snk = sink.as<reyer::plugin::IEyeSink>()) {
-            pipeline_.addSink(snk);
+        if (auto snk = sink.asShared<reyer::plugin::IEyeSink>()) {
+            pipeline_.addSink(std::move(snk));
             spdlog::info("Pipeline: replaced sink with '{}'", sink.getName());
         }
     }
 
-    void AddSink(reyer::plugin::ISink<reyer::core::EyeData> *sink) {
+    void AddSink(std::shared_ptr<reyer::plugin::ISink<reyer::core::EyeData>> sink) {
         std::lock_guard<std::mutex> lock(mutex_);
-        pipeline_.addSink(sink);
+        pipeline_.addSink(std::move(sink));
     }
 
     void RemoveSink() {
@@ -126,18 +124,27 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     reyer::plugin::EyePipeline &pipeline() { return pipeline_; }
 
   private:
+    // init/shutdown are guarded by initialized_ so they are idempotent: a
+    // redundant posted init (e.g. two Configure() calls in quick succession)
+    // is a no-op, and plugins are never double-init'd or double-shutdown.
     void initPlugins_() {
+        if (initialized_)
+            return;
         if (source_)
             source_->init();
         for (auto &stage : stages_)
             stage->init();
+        initialized_ = true;
     }
 
     void shutdownPlugins_() {
+        if (!initialized_)
+            return;
         for (auto &stage : stages_)
             stage->shutdown();
         if (source_)
             source_->shutdown();
+        initialized_ = false;
     }
 
     reyer::plugin::EyePipeline pipeline_;
@@ -146,7 +153,7 @@ class PipelineManager : public threading::Thread<PipelineManager> {
     std::vector<reyer::plugin::Plugin> stages_;
 
     std::mutex mutex_;
-    std::atomic<bool> needs_init_{false};
+    bool initialized_{false}; // guarded by mutex_
 };
 
 } // namespace reyer_rt::managers
