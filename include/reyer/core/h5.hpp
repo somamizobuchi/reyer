@@ -126,7 +126,51 @@ void add_member(hid_t compound, const char *name, std::size_t offset) {
     detail::check_err(err, "H5Tinsert");
 }
 
-class File {
+namespace detail {
+
+inline hid_t create_scalar_attr(hid_t obj, const char *name, hid_t type) {
+    hid_t space = check_id(H5Screate(H5S_SCALAR), "H5Screate");
+    hid_t attr = H5Acreate2(obj, name, type, space, H5P_DEFAULT, H5P_DEFAULT);
+    H5Sclose(space);
+    return check_id(attr, "H5Acreate2");
+}
+
+} // namespace detail
+
+// Attach a scalar attribute to any HDF5 object — file, group, or dataset.
+template <typename A>
+void set_attr(hid_t obj, const char *name, const A &value) {
+    TypeId type(hdf5_type_traits<A>::get());
+    hid_t attr = detail::create_scalar_attr(obj, name, type.get());
+    herr_t err = H5Awrite(attr, type.get(), &value);
+    H5Aclose(attr);
+    detail::check_err(err, "H5Awrite");
+}
+
+// H5T_VARIABLE expects the address of the character pointer, not of the string.
+inline void set_attr(hid_t obj, const char *name, const std::string &value) {
+    TypeId type(hdf5_type_traits<std::string>::get());
+    hid_t attr = detail::create_scalar_attr(obj, name, type.get());
+    const char *data = value.c_str();
+    herr_t err = H5Awrite(attr, type.get(), &data);
+    H5Aclose(attr);
+    detail::check_err(err, "H5Awrite");
+}
+
+inline void set_attr(hid_t obj, const char *name, const char *value) {
+    set_attr(obj, name, std::string(value));
+}
+
+// Gives the wrappers below a set_attr member; Derived exposes its object id
+// through get().
+template <typename Derived> class AttributeMixin {
+  public:
+    template <typename A> void set_attr(const char *name, const A &value) {
+        ::reyer::h5::set_attr(static_cast<Derived *>(this)->get(), name, value);
+    }
+};
+
+class File : public AttributeMixin<File> {
   public:
     File(const std::string &filename, unsigned flags = H5F_ACC_TRUNC) {
         file_ = detail::check_id(
@@ -145,7 +189,7 @@ class File {
     hid_t file_;
 };
 
-template <typename T> class Dataset {
+template <typename T> class Dataset : public AttributeMixin<Dataset<T>> {
   public:
     explicit Dataset(hid_t parent_id, const std::string &name,
                      size_t chunk_size = 1024)
@@ -194,28 +238,7 @@ template <typename T> class Dataset {
         buffer_.clear();
     }
 
-    template <typename A> void set_attr(const char *name, const A &value) {
-        hid_t attr_type = hdf5_type_traits<A>::get();
-        hid_t space = H5Screate(H5S_SCALAR);
-        hid_t attr = H5Acreate2(dataset_, name, attr_type, space, H5P_DEFAULT,
-                                H5P_DEFAULT);
-        H5Awrite(attr, attr_type, &value);
-        H5Aclose(attr);
-        H5Sclose(space);
-        H5Tclose(attr_type);
-    }
-
-    void set_attr(const char *name, const char *value) {
-        hid_t attr_type = H5Tcopy(H5T_C_S1);
-        H5Tset_size(attr_type, strlen(value) + 1);
-        hid_t space = H5Screate(H5S_SCALAR);
-        hid_t attr = H5Acreate2(dataset_, name, attr_type, space, H5P_DEFAULT,
-                                H5P_DEFAULT);
-        H5Awrite(attr, attr_type, value);
-        H5Aclose(attr);
-        H5Sclose(space);
-        H5Tclose(attr_type);
-    }
+    hid_t get() const { return dataset_; }
 
   private:
     void write_direct(const T *data, size_t count) {
@@ -245,7 +268,7 @@ template <typename T> class Dataset {
     std::vector<T> buffer_;
 };
 
-class Group {
+class Group : public AttributeMixin<Group> {
   public:
     Group(hid_t parent, const std::string &name) {
         group_ = detail::check_id(
@@ -332,4 +355,10 @@ H5_DEFINE_TYPE(reyer::core::EyeData,
     H5_AUTO_FIELD(left)
     H5_AUTO_FIELD(right)
     H5_AUTO_FIELD(timestamp)
+    H5_AUTO_FIELD(device_timestamp)
+)
+
+H5_DEFINE_TYPE(reyer::core::UserEvent,
+    H5_AUTO_FIELD(timestamp)
+    H5_AUTO_FIELD(event)
 )

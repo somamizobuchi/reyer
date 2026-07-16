@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 
 #define REYER_DEFINE_INTERFACE_ID(name)                                        \
     static constexpr InterfaceID iid = {reyer::core::hash_string(#name)};
@@ -155,10 +156,22 @@ struct IPlugin : public virtual ILifecycle {
     virtual uint32_t getVersion() const = 0;
 };
 
+// Implemented by the host, injected into a task before init(). Deliberately
+// free of HDF5 types: the host owns the file, and the HDF5 library is not
+// thread-safe, so a task must never write to it directly. Calls are cheap
+// (stamp + enqueue) and safe from the render thread.
+struct IRecorder {
+    virtual void recordEvent(int event, uint64_t timestamp) = 0;
+    virtual ~IRecorder() = default;
+};
+
 struct IRender {
     REYER_DEFINE_INTERFACE_ID(IRender);
     virtual void render() = 0;
     virtual void setRenderContext(core::RenderContext ctx) = 0;
+    // Valid from before init() until after shutdown(); null when a task runs
+    // without a file to record into.
+    virtual void setRecorder(IRecorder *recorder) = 0;
     virtual bool isFinished() const = 0;
     virtual std::unique_ptr<ICalibration> takeCalibration() = 0;
     virtual ~IRender() = default;
@@ -241,8 +254,15 @@ class SourceBase : public virtual ISource<T>,
     void Init() {}
     void Run() {
         T sample{};
-        if (onProduce(sample))
+        if (onProduce(sample)) {
+            // Stamp on receipt so every source shares one clock with recorded
+            // events, whatever clock the underlying device uses. Sources that
+            // have a device timestamp keep it in their own field.
+            if constexpr (requires { sample.timestamp; }) {
+                sample.timestamp = core::now_us();
+            }
             output_queue_.push(std::move(sample));
+        }
     }
     void Shutdown() {}
 
@@ -288,6 +308,10 @@ class RenderBase : public virtual IRender {
         render_context_ = ctx;
     }
 
+    void setRecorder(IRecorder *recorder) override final {
+        recorder_ = recorder;
+    }
+
     std::unique_ptr<ICalibration> takeCalibration() override {
         return std::move(pending_calibration_);
     }
@@ -302,6 +326,21 @@ class RenderBase : public virtual IRender {
         return render_context_;
     };
 
+    // Record a timestamped marker into the task's event stream. Stamped here,
+    // at the call site, so the timestamp reflects when the event happened
+    // rather than when it reached the file. Safe to call from onRender() or
+    // onConsume(); a no-op when the task is running without a file.
+    void recordEvent(int event) {
+        if (recorder_)
+            recorder_->recordEvent(event, core::now_us());
+    }
+
+    template <typename E>
+        requires std::is_enum_v<E>
+    void recordEvent(E event) {
+        recordEvent(static_cast<int>(event));
+    }
+
     void endTask() { finished_ = true; }
 
     void resetFinished() {
@@ -315,6 +354,7 @@ class RenderBase : public virtual IRender {
 
   private:
     core::RenderContext render_context_;
+    IRecorder *recorder_{nullptr};
     bool finished_ = false;
     std::unique_ptr<ICalibration> pending_calibration_;
 };

@@ -155,7 +155,7 @@ void GraphicsManager::applyGraphicsSettings_(
     spdlog::info("Graphics initialized: {}x{} @ {}fps", gs.width, gs.height,
                  gs.target_fps);
     spdlog::info("Resolution: {}x{}, Physical size: {}mm x {}mm, View "
-                 "distance: {}mm, PPD: {}x{}",
+                 "distance: {}mm, PPD: {:.2f}x{:.2f}",
                  gs.width, gs.height, mw, mh, settings.view_distance_mm,
                  renderContext_.ppd_x, renderContext_.ppd_y);
 }
@@ -314,6 +314,11 @@ GraphicsManager::GetCurrentGraphicsSettings() const {
     return std::nullopt;
 }
 
+std::optional<net::message::GraphicsSettingsRequest>
+GraphicsManager::GetCurrentGraphicsSettingsRequest() const {
+    return graphicsSettings_;
+}
+
 reyer::core::RenderContext GraphicsManager::GetRenderContext() const {
     return renderContext_;
 }
@@ -322,9 +327,11 @@ bool GraphicsManager::IsGraphicsInitialized() const {
     return graphicsInitialized_;
 }
 
-void GraphicsManager::SetCurrentTask(reyer::plugin::Plugin task) {
+void GraphicsManager::SetCurrentTask(reyer::plugin::Plugin task,
+                                     reyer::plugin::IRecorder *recorder) {
     std::lock_guard<std::mutex> lock(taskMutex_);
     pendingTask_ = task;
+    pendingRecorder_ = recorder;
     taskFinished_.store(false, std::memory_order_release);
 }
 
@@ -341,6 +348,7 @@ void GraphicsManager::retireTask_(reyer::plugin::Plugin task) {
 void GraphicsManager::pollTaskQueue_() {
     reyer::plugin::Plugin pending;
     reyer::plugin::Plugin outgoing;
+    reyer::plugin::IRecorder *pending_recorder = nullptr;
     std::vector<std::promise<void>> promises;
     {
         std::lock_guard<std::mutex> lock(taskMutex_);
@@ -364,6 +372,8 @@ void GraphicsManager::pollTaskQueue_() {
             }
             pending = std::move(pendingTask_);
             pendingTask_ = reyer::plugin::Plugin();
+            pending_recorder = pendingRecorder_;
+            pendingRecorder_ = nullptr;
         }
     }
 
@@ -392,6 +402,7 @@ void GraphicsManager::pollTaskQueue_() {
 
     if (auto *render = pending.as<reyer::plugin::IRender>()) {
         render->setRenderContext(renderContext_);
+        render->setRecorder(pending_recorder);
     }
 
     spdlog::info("Initializing task \"{}\"", pending.getName());

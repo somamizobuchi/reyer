@@ -5,7 +5,7 @@
     - [ ] Display version, author, description in UI
 
 - [ ] Need to update hdf5 `Dataset` class to accept length or unlimited (since we'll need to write scalars later)
-- [ ] Add saving of protocol data to hdf5 file
+- [x] Add saving of protocol data to hdf5 file
     - protocol
     - graphics settings
     - start time

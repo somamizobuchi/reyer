@@ -2,12 +2,43 @@
 #include "reyer_rt/managers/graphics_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
 #include "reyer_rt/utils/utils.hpp"
+#include <chrono>
 #include <format>
+#include <glaze/glaze.hpp>
+#include <optional>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 #include <thread>
 
 namespace reyer_rt::managers {
+
+namespace {
+
+// Mirrors experiment::Task, but embeds the plugin's configuration as raw JSON
+// so it isn't re-encoded as an escaped string.
+struct TaskConfig {
+    std::string name{};
+    glz::raw_json configuration{};
+};
+
+// The complete configuration of a run, serialized to the file's config_json
+// attribute. Optionals are absent when a protocol starts before graphics have
+// been initialized.
+struct RunConfig {
+    std::string protocol_uuid{};
+    std::string protocol_name{};
+    std::string participant_id{};
+    std::string notes{};
+    uint64_t start_time_ns{};
+    std::string start_time_iso{};
+    std::optional<net::message::GraphicsSettings> graphics{};
+    std::optional<uint32_t> view_distance_mm{};
+    std::optional<net::message::MonitorInfo> monitor{};
+    std::optional<reyer::core::RenderContext> render_context{};
+    std::vector<TaskConfig> tasks{};
+};
+
+} // namespace
 
 ProtocolManager::ProtocolManager(
     std::shared_ptr<GraphicsManager> &graphics_manager,
@@ -96,20 +127,23 @@ void ProtocolManager::cleanupCurrentTask_() {
     if (auto pipeline_mgr = pipelineManager_.lock()) {
         pipeline_mgr->RemoveSink();
     }
-    if (eyeDataWriter_) {
-        eyeDataWriter_->Stop();
-        eyeDataWriter_.reset();
-    }
-    currentGroup_.reset();
 
     if (currentTask_) {
         // Teardown (reset+shutdown) runs on the graphics thread. Wait for it
         // to complete before releasing our handle so ordering is preserved.
+        // This precedes tearing the writer down so a task can still record
+        // from its reset()/shutdown().
         if (auto gfx = graphicsManager_.lock()) {
             gfx->ClearCurrentTask().wait();
         }
         currentTask_ = reyer::plugin::Plugin();
     }
+
+    if (taskDataWriter_) {
+        taskDataWriter_->Stop();
+        taskDataWriter_.reset();
+    }
+    currentGroup_.reset();
 }
 
 bool ProtocolManager::SetProtocol(
@@ -200,6 +234,10 @@ void ProtocolManager::startProtocol_() {
     currentFile_ =
         std::make_shared<reyer::h5::File>(filename, H5F_ACC_TRUNC);
 
+    protocolEpochUs_ = reyer::core::now_us();
+
+    writeRunConfig_();
+
     if (auto bcast = broadcastManager_.lock()) {
         net::message::ProtocolEventMessage event{
             .protocol_uuid = currentProtocol_->protocol_uuid,
@@ -215,6 +253,107 @@ void ProtocolManager::startProtocol_() {
     }
 
     loadTask_(LoadCommand::FIRST);
+}
+
+void ProtocolManager::writeRunConfig_() {
+    if (!currentFile_ || !currentProtocol_)
+        return;
+
+    const auto &protocol = *currentProtocol_;
+    const hid_t root = currentFile_->get();
+
+    auto now = std::chrono::system_clock::now();
+    RunConfig config{
+        .protocol_uuid = protocol.protocol_uuid,
+        .protocol_name = protocol.name,
+        .participant_id = protocol.participant_id,
+        .notes = protocol.notes,
+        .start_time_ns =
+            static_cast<uint64_t>(std::chrono::duration_cast<
+                                      std::chrono::nanoseconds>(
+                                      now.time_since_epoch())
+                                      .count()),
+        .start_time_iso = std::format(
+            "{:%FT%TZ}", std::chrono::floor<std::chrono::seconds>(now)),
+    };
+
+    if (auto gfx = graphicsManager_.lock()) {
+        if (auto settings = gfx->GetCurrentGraphicsSettingsRequest()) {
+            config.graphics = settings->graphics_settings;
+            config.view_distance_mm = settings->view_distance_mm;
+            config.render_context = gfx->GetRenderContext();
+
+            for (const auto &monitor : gfx->GetMonitorInfo()) {
+                if (monitor.index == settings->graphics_settings.monitor_index) {
+                    config.monitor = monitor;
+                    break;
+                }
+            }
+        } else {
+            spdlog::warn("Graphics not initialized; run config will omit "
+                         "graphics settings");
+        }
+    }
+
+    config.tasks.reserve(protocol.tasks.size());
+    for (const auto &task : protocol.tasks) {
+        config.tasks.emplace_back(
+            task.name, glz::raw_json{task.configuration.empty()
+                                         ? "null"
+                                         : task.configuration});
+    }
+
+    try {
+        // Typed attributes for the fields runs get filtered and grouped on;
+        // config_json below carries the whole thing without loss.
+        reyer::h5::set_attr(root, "protocol_uuid", config.protocol_uuid);
+        reyer::h5::set_attr(root, "protocol_name", config.protocol_name);
+        reyer::h5::set_attr(root, "participant_id", config.participant_id);
+        reyer::h5::set_attr(root, "notes", config.notes);
+        reyer::h5::set_attr(root, "start_time_ns", config.start_time_ns);
+        reyer::h5::set_attr(root, "start_time_iso", config.start_time_iso);
+        reyer::h5::set_attr(root, "task_count",
+                            static_cast<int>(config.tasks.size()));
+
+        if (config.graphics) {
+            const auto &gs = *config.graphics;
+            reyer::h5::set_attr(root, "monitor_index", gs.monitor_index);
+            reyer::h5::set_attr(root, "vsync", gs.vsync);
+            reyer::h5::set_attr(root, "full_screen", gs.full_screen);
+            reyer::h5::set_attr(root, "anti_aliasing", gs.anti_aliasing);
+            reyer::h5::set_attr(root, "target_fps", gs.target_fps);
+            reyer::h5::set_attr(root, "width", gs.width);
+            reyer::h5::set_attr(root, "height", gs.height);
+        }
+        if (config.view_distance_mm) {
+            reyer::h5::set_attr(root, "view_distance_mm",
+                                *config.view_distance_mm);
+        }
+        if (config.monitor) {
+            const auto &m = *config.monitor;
+            reyer::h5::set_attr(root, "monitor_name", m.name);
+            reyer::h5::set_attr(root, "monitor_width_px", m.width_px);
+            reyer::h5::set_attr(root, "monitor_height_px", m.height_px);
+            reyer::h5::set_attr(root, "monitor_width_mm", m.width_mm);
+            reyer::h5::set_attr(root, "monitor_height_mm", m.height_mm);
+            reyer::h5::set_attr(root, "monitor_refresh_rate", m.refresh_rate);
+        }
+        if (config.render_context) {
+            reyer::h5::set_attr(root, "ppd_x", config.render_context->ppd_x);
+            reyer::h5::set_attr(root, "ppd_y", config.render_context->ppd_y);
+        }
+
+        std::string config_json;
+        if (auto ec = glz::write_json(config, config_json)) {
+            spdlog::warn("Failed to serialize run config: {}",
+                         glz::format_error(ec));
+        } else {
+            reyer::h5::set_attr(root, "config_json", config_json);
+        }
+    } catch (const std::exception &e) {
+        // A run without its config attributes is still worth recording.
+        spdlog::error("Failed to write run config: {}", e.what());
+    }
 }
 
 void ProtocolManager::pollCommands_() {
@@ -280,18 +419,20 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
         if (auto pipeline_mgr = pipelineManager_.lock()) {
             pipeline_mgr->RemoveSink();
         }
-        if (eyeDataWriter_) {
-            eyeDataWriter_->Stop();
-            eyeDataWriter_.reset();
-        }
-        currentGroup_.reset();
 
         // Teardown (reset+shutdown) runs on the graphics thread. Wait for it
         // to complete before loading the next task so shutdown() strictly
-        // precedes the next task's init().
+        // precedes the next task's init(). The writer is retired afterwards so
+        // a task can still record from its reset()/shutdown().
         if (auto gfx = graphicsManager_.lock()) {
             gfx->ClearCurrentTask().wait();
         }
+
+        if (taskDataWriter_) {
+            taskDataWriter_->Stop();
+            taskDataWriter_.reset();
+        }
+        currentGroup_.reset();
 
         net::message::ProtocolEventMessage event{
             currentProtocol_->protocol_uuid,
@@ -340,30 +481,52 @@ void ProtocolManager::loadTask_(const LoadCommand &command) {
         configurable->setConfigStr(task.configuration.c_str());
     }
 
-    // Hand the task to GraphicsManager — it will ChangeDirectory, setRenderContext,
-    // and call init() on the graphics thread before rendering starts.
-    if (auto gfx = graphicsManager_.lock()) {
-        gfx->SetCurrentTask(currentTask_);
+    // Create the group and writer before staging the task: the graphics thread
+    // injects the recorder and calls init() as soon as it sees the task, so the
+    // writer must already exist or a task recording from onInit() would find no
+    // recorder.
+    if (currentFile_) {
+        auto group_name = std::format("task_{:03d}", currentTaskIndex_);
+        currentGroup_ =
+            std::make_unique<reyer::h5::Group>(currentFile_->get(), group_name);
+        currentGroup_->set_attr("task_name", task.name);
+        currentGroup_->set_attr("task_index",
+                                static_cast<int>(currentTaskIndex_));
+        if (!task.configuration.empty()) {
+            currentGroup_->set_attr("configuration", task.configuration);
+        }
+
+        // t=0 for everything in this group. Recorded relative to the protocol
+        // start so timestamps can be lined up across tasks.
+        auto task_epoch_us = reyer::core::now_us();
+        currentGroup_->set_attr("t0_offset_us",
+                                task_epoch_us > protocolEpochUs_
+                                    ? task_epoch_us - protocolEpochUs_
+                                    : uint64_t{0});
+
+        taskDataWriter_ = std::make_shared<stages::TaskDataWriter>(
+            currentGroup_->get(), task_epoch_us);
     }
 
-    // Set current task as pipeline sink and create HDF5 writer
+    // Hand the task to GraphicsManager — it will ChangeDirectory, setRenderContext,
+    // setRecorder, and call init() on the graphics thread before rendering starts.
+    if (auto gfx = graphicsManager_.lock()) {
+        gfx->SetCurrentTask(currentTask_, taskDataWriter_.get());
+    }
+
+    // Set current task as pipeline sink, then attach the writer alongside it.
     if (auto pipeline_mgr = pipelineManager_.lock()) {
         pipeline_mgr->ReplaceSink(currentTask_);
 
-        if (currentFile_) {
-            auto group_name = std::format("task_{:03d}", currentTaskIndex_);
-            currentGroup_ = std::make_unique<reyer::h5::Group>(
-                currentFile_->get(), group_name);
-            eyeDataWriter_ = std::make_shared<stages::EyeDataWriter>(
-                currentGroup_->get());
+        if (taskDataWriter_) {
             // Hand the pipeline a shared_ptr<ISink> that shares ownership with
-            // eyeDataWriter_ (aliasing ctor) so it keeps the writer alive for
+            // taskDataWriter_ (aliasing ctor) so it keeps the writer alive for
             // as long as it is registered as a sink. ISink is a virtual base,
             // so this relies on the implicit upcast, not static_pointer_cast.
             pipeline_mgr->AddSink(
                 std::shared_ptr<reyer::plugin::ISink<reyer::core::EyeData>>(
-                    eyeDataWriter_, eyeDataWriter_.get()));
-            eyeDataWriter_->Spawn();
+                    taskDataWriter_, taskDataWriter_.get()));
+            taskDataWriter_->Spawn();
         }
     }
 

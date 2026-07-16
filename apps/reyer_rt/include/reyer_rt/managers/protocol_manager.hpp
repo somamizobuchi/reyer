@@ -12,7 +12,7 @@
 #include "reyer_rt/managers/pipeline_manager.hpp"
 #include "reyer_rt/managers/plugin_manager.hpp"
 #include "reyer_rt/net/message_types.hpp"
-#include "reyer_rt/stages/eye_data_writer.hpp"
+#include "reyer_rt/stages/task_data_writer.hpp"
 #include "reyer_rt/threading/thread.hpp"
 #include <reyer/core/h5.hpp>
 #include <reyer/core/queue.hpp>
@@ -57,6 +57,8 @@ class ProtocolManager : public threading::Thread<ProtocolManager> {
     void startProtocol_();
     void loadTask_(const LoadCommand &command);
     void cleanupCurrentTask_();
+    // Write the run's configuration to the root of currentFile_.
+    void writeRunConfig_();
 
     std::atomic<State> state_{State::STANDBY};
     bool exitRequested_{false};
@@ -77,7 +79,10 @@ class ProtocolManager : public threading::Thread<ProtocolManager> {
 
     std::shared_ptr<reyer::h5::File> currentFile_;
     std::unique_ptr<reyer::h5::Group> currentGroup_;
-    std::shared_ptr<stages::EyeDataWriter> eyeDataWriter_;
+    std::shared_ptr<stages::TaskDataWriter> taskDataWriter_;
+    // Monotonic clock reading (microseconds) at protocol start; task epochs are
+    // recorded relative to it so timestamps can be compared across tasks.
+    uint64_t protocolEpochUs_{0};
 };
 
 } // namespace reyer_rt::managers

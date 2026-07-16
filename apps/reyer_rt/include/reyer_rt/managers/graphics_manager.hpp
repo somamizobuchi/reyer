@@ -37,6 +37,11 @@ class GraphicsManager {
     std::optional<net::message::GraphicsSettings>
     GetCurrentGraphicsSettings() const;
 
+    // The full request, including view_distance_mm, which the settings alone
+    // do not carry.
+    std::optional<net::message::GraphicsSettingsRequest>
+    GetCurrentGraphicsSettingsRequest() const;
+
     reyer::core::RenderContext GetRenderContext() const;
 
     bool IsGraphicsInitialized() const;
@@ -47,7 +52,10 @@ class GraphicsManager {
     // The full task lifecycle (init/render/reset/shutdown) always runs on the
     // graphics thread. SetCurrentTask stages a task; the graphics thread will
     // shut down any outgoing task, then init() the new one before rendering.
-    void SetCurrentTask(reyer::plugin::Plugin task);
+    // `recorder` is injected before the task's init() and must outlive its
+    // shutdown(); pass nullptr when the task has no file to record into.
+    void SetCurrentTask(reyer::plugin::Plugin task,
+                        reyer::plugin::IRecorder *recorder = nullptr);
     // Retire the current task. reset()+shutdown() run on the graphics thread.
     // Returns a future that becomes ready once teardown has completed; callers
     // that require the task to be torn down before proceeding should wait on it.
@@ -104,6 +112,7 @@ class GraphicsManager {
     std::mutex taskMutex_;
     reyer::plugin::Plugin currentTask_;
     reyer::plugin::Plugin pendingTask_; // waiting to be init'd on gfx thread
+    reyer::plugin::IRecorder *pendingRecorder_{nullptr};
     bool clearRequested_{false};        // retire currentTask_ on gfx thread
     // Promises fulfilled once a requested teardown completes on the gfx thread.
     std::vector<std::promise<void>> clearPromises_;
